@@ -81,12 +81,9 @@
     get2:    './assets/audio/get-2.mp3',
     get3:    './assets/audio/get-3.mp3',
     get4:    './assets/audio/get-4.mp3',
+    miss1:   './assets/audio/miss-1.mp3',
     miss2:   './assets/audio/miss-2.mp3',
     miss3:   './assets/audio/miss-3.mp3',
-    miss4:   './assets/audio/miss-4.mp3',
-    miss5:   './assets/audio/miss-5.mp3',
-    miss6:   './assets/audio/miss-6.mp3',
-    miss7:   './assets/audio/miss-7.mp3',
     bounce1: './assets/audio/bounce-1.mp3'
   };
 
@@ -326,7 +323,7 @@
     const kickDir = level.candy.x >= W / 2 ? -1 : 1;
     state.candy = {
       x: level.candy.x, y: level.candy.y,
-      vx: kickDir * 1.8, vy: 0,
+      vx: kickDir * 4.5, vy: 0,
       r: CANDY_R, attached: true, alive: true
     };
 
@@ -446,68 +443,42 @@
     const active = getActiveRopes();
     if (!active.length) { state.candy.attached = false; return; }
 
-    const c      = state.candy;
-    const steps  = 2;              // sub-steps for stability
-    const subDt  = dt / steps;
-    const DAMP   = 0.995;          // air resistance while swinging
-    const SPRING = 0.18;           // how snappy multi-rope average pulls
+    const c     = state.candy;
+    const steps = 3;
+    const subDt = dt / steps;
 
     for (let s = 0; s < steps; s++) {
-      // Apply gravity to velocity
+      // Gravity — no damping, let energy stay in the system
       c.vy += GRAVITY * subDt / 16.667;
-      c.vx *= DAMP;
-      c.vy *= DAMP;
 
-      // Integrate position
+      // Integrate
       c.x += c.vx * subDt / 16.667;
       c.y += c.vy * subDt / 16.667;
 
-      // Enforce rope length constraint for each active rope
-      // With multiple ropes: apply each constraint and average the corrections
-      let totalCorrX = 0, totalCorrY = 0;
-
+      // Rope length constraint — position correction only, no velocity strip
       for (const rope of active) {
         const dx   = c.x - rope.anchor.x;
         const dy   = c.y - rope.anchor.y;
         const dist = Math.hypot(dx, dy);
         const len  = rope.length || 120;
-
-        if (dist < 0.001) continue;
-
-        // Only enforce if candy is BEYOND rope length (ropes don't push)
-        if (dist > len) {
-          const correction = (dist - len) / dist;
-          totalCorrX += dx * correction;
-          totalCorrY += dy * correction;
+        if (dist < 0.001 || dist <= len) continue;
+        // Push candy back to rope radius
+        const over = (dist - len) / dist;
+        c.x -= dx * over;
+        c.y -= dy * over;
+        // Reflect velocity so rope acts as a rigid constraint, not a brake
+        const nx = dx / dist, ny = dy / dist;
+        const vDotN = c.vx * nx + c.vy * ny;
+        if (vDotN > 0) {
+          c.vx -= vDotN * nx;
+          c.vy -= vDotN * ny;
         }
       }
-
-      // Average correction across all ropes and apply
-      if (active.length > 0) {
-        c.x -= totalCorrX / active.length;
-        c.y -= totalCorrY / active.length;
-
-        // Recompute velocity from corrected position delta to avoid energy gain
-        // (implicit velocity update from constraint)
-      }
     }
 
-    // Reproject velocity to be tangent to the primary rope
-    // This removes the radial component that constraint already handles
-    if (active.length === 1) {
-      const rope = active[0];
-      const dx   = c.x - rope.anchor.x;
-      const dy   = c.y - rope.anchor.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist > 0.001) {
-        const nx  = dx / dist;
-        const ny  = dy / dist;
-        // Remove radial (along-rope) velocity component
-        const radial = c.vx * nx + c.vy * ny;
-        c.vx -= radial * nx * 0.98;
-        c.vy -= radial * ny * 0.98;
-      }
-    }
+    // Very light air resistance — just enough to stop infinite oscillation
+    c.vx *= 0.999;
+    c.vy *= 0.999;
   }
 
   function applyMagnet() {
@@ -652,7 +623,7 @@
     state.missDir     = c.x < mouth.x ? -1 : 1;
     state.boohaSprite = 'booSad';
     setHud(state.levelIndex + 1, 'Miss');
-    const missSfx = ['miss2','miss3','miss4','miss5','miss6','miss7'];
+    const missSfx = ['miss1','miss2','miss3'];
     playSfx(missSfx[Math.floor(Math.random() * missSfx.length)]);
 
     state.pendingFailTimeout = setTimeout(() => {
@@ -789,7 +760,7 @@
   // Draw
   // ─────────────────────────────────────────────────
   function drawBackground() {
-    // Candy kingdom gradient — deep purple top to warm pink bottom
+    // Layer 1 — candy kingdom gradient (always visible at edges / if no image)
     const grad = ctx.createLinearGradient(0, 0, 0, H);
     grad.addColorStop(0,    '#2d0050');
     grad.addColorStop(0.45, '#6b0080');
@@ -798,22 +769,7 @@
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
-    // Soft ambient glow pools — give depth without gradients flickering
-    const glows = [
-      { x: W * 0.2,  y: H * 0.15, r: W * 0.55, c: 'rgba(160,0,200,0.13)' },
-      { x: W * 0.85, y: H * 0.3,  r: W * 0.4,  c: 'rgba(255,80,160,0.10)' },
-      { x: W * 0.5,  y: H * 0.65, r: W * 0.5,  c: 'rgba(220,0,100,0.09)' },
-      { x: W * 0.1,  y: H * 0.8,  r: W * 0.38, c: 'rgba(255,120,200,0.11)' },
-    ];
-    for (const g of glows) {
-      const rg = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r);
-      rg.addColorStop(0, g.c);
-      rg.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = rg;
-      ctx.fillRect(0, 0, W, H);
-    }
-
-    // User background image sits ABOVE the gradient, BELOW the bubbles
+    // Layer 2 — user background image (cover-fit, full opacity, on top of gradient)
     if (images.bg) {
       const img   = images.bg;
       const scale = Math.max(W / img.width, H / img.height);
@@ -822,7 +778,7 @@
       ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
     }
 
-    // Animated bubbles + sparkles float over the bg image
+    // Layer 3 — candy kingdom bubble/sparkle effects float over image
     drawBgStars();
   }
 
