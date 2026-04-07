@@ -1,5 +1,5 @@
 
-    // =====================================================
+// =====================================================
 // Feed Booha — Engine (v3)
 // =====================================================
 // Portrait mode (540×960)
@@ -155,18 +155,32 @@
   }
 
   // ─────────────────────────────────────────────────
-  // Bg stars
+  // Candy kingdom background — animated bubbles + sparkles
   // ─────────────────────────────────────────────────
   function initBgStars() {
     state.bgStars = [];
-    for (let i = 0; i < 55; i++) {
+    // Bubbles
+    for (let i = 0; i < 22; i++) {
       state.bgStars.push({
-        x: Math.random() * W,
-        y: Math.random() * H,
-        r: Math.random() * 2.2 + 0.5,
-        speed: Math.random() * 0.18 + 0.04,
+        kind:  'bubble',
+        x:     Math.random() * W,
+        y:     Math.random() * H,
+        r:     Math.random() * 28 + 8,
+        speed: Math.random() * 0.35 + 0.12,
+        wobble: Math.random() * Math.PI * 2,
+        wobbleSpeed: Math.random() * 0.03 + 0.01,
+        alpha: Math.random() * 0.13 + 0.05
+      });
+    }
+    // Sparkle stars
+    for (let i = 0; i < 40; i++) {
+      state.bgStars.push({
+        kind:  'sparkle',
+        x:     Math.random() * W,
+        y:     Math.random() * H,
+        r:     Math.random() * 1.8 + 0.4,
         phase: Math.random() * Math.PI * 2,
-        pulse: Math.random() * 0.6 + 0.4,
+        pulse: Math.random() * 0.5 + 0.3,
         alpha: 0
       });
     }
@@ -175,21 +189,47 @@
   function updateBgStars(dt) {
     const t = state.lastTime * 0.001;
     for (const s of state.bgStars) {
-      s.y += s.speed * dt * 0.06;
-      if (s.y > H + 4) { s.y = -4; s.x = Math.random() * W; }
-      s.alpha = s.pulse * (0.5 + 0.5 * Math.sin(t * 1.2 + s.phase));
+      if (s.kind === 'bubble') {
+        s.y -= s.speed * dt * 0.06;
+        s.wobble += s.wobbleSpeed * dt * 0.06;
+        s.x += Math.sin(s.wobble) * 0.4;
+        if (s.y < -s.r * 2) {
+          s.y = H + s.r;
+          s.x = Math.random() * W;
+        }
+      } else {
+        s.alpha = s.pulse * (0.5 + 0.5 * Math.sin(t * 1.4 + s.phase));
+      }
     }
   }
 
   function drawBgStars() {
     for (const s of state.bgStars) {
-      ctx.save();
-      ctx.globalAlpha = s.alpha * 0.7;
-      ctx.fillStyle   = '#fff8e8';
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      if (s.kind === 'bubble') {
+        ctx.save();
+        ctx.globalAlpha = s.alpha;
+        // Bubble ring
+        ctx.strokeStyle = '#ffccee';
+        ctx.lineWidth   = 1.2;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.stroke();
+        // Shine dot
+        ctx.globalAlpha = s.alpha * 0.7;
+        ctx.fillStyle   = '#fff';
+        ctx.beginPath();
+        ctx.arc(s.x - s.r * 0.28, s.y - s.r * 0.3, s.r * 0.22, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } else {
+        ctx.save();
+        ctx.globalAlpha = s.alpha * 0.65;
+        ctx.fillStyle   = '#ffddff';
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
     }
   }
 
@@ -283,14 +323,20 @@
       r: CANDY_R, attached: true, alive: true
     };
 
-    state.ropes = (level.ropes || []).map(r => ({
-      id:      r.id,
-      anchor:  { x: r.anchor.x, y: r.anchor.y },
-      cut:     false,
-      type:    r.type    || 'normal',
-      delayMs: r.delayMs || 400,
-      pending: false
-    }));
+    state.ropes = (level.ropes || []).map(r => {
+      const dx  = level.candy.x - r.anchor.x;
+      const dy  = level.candy.y - r.anchor.y;
+      const len = Math.hypot(dx, dy);
+      return {
+        id:      r.id,
+        anchor:  { x: r.anchor.x, y: r.anchor.y },
+        cut:     false,
+        type:    r.type    || 'normal',
+        delayMs: r.delayMs || 400,
+        pending: false,
+        length:  len
+      };
+    });
 
     state.objects = (level.objects || []).map(o => ({
       ...o, activated: false, fanTimer: 0
@@ -392,11 +438,69 @@
   function updateAttachedCandy(dt) {
     const active = getActiveRopes();
     if (!active.length) { state.candy.attached = false; return; }
-    const center = averageAnchor();
-    const c = state.candy;
-    c.x = dtLerp(c.x, center.x,      0.18, dt);
-    c.y = dtLerp(c.y, center.y + 80, 0.18, dt);
-    c.vx *= 0.9; c.vy *= 0.9;
+
+    const c      = state.candy;
+    const steps  = 2;              // sub-steps for stability
+    const subDt  = dt / steps;
+    const DAMP   = 0.995;          // air resistance while swinging
+    const SPRING = 0.18;           // how snappy multi-rope average pulls
+
+    for (let s = 0; s < steps; s++) {
+      // Apply gravity to velocity
+      c.vy += GRAVITY * subDt / 16.667;
+      c.vx *= DAMP;
+      c.vy *= DAMP;
+
+      // Integrate position
+      c.x += c.vx * subDt / 16.667;
+      c.y += c.vy * subDt / 16.667;
+
+      // Enforce rope length constraint for each active rope
+      // With multiple ropes: apply each constraint and average the corrections
+      let totalCorrX = 0, totalCorrY = 0;
+
+      for (const rope of active) {
+        const dx   = c.x - rope.anchor.x;
+        const dy   = c.y - rope.anchor.y;
+        const dist = Math.hypot(dx, dy);
+        const len  = rope.length || 120;
+
+        if (dist < 0.001) continue;
+
+        // Only enforce if candy is BEYOND rope length (ropes don't push)
+        if (dist > len) {
+          const correction = (dist - len) / dist;
+          totalCorrX += dx * correction;
+          totalCorrY += dy * correction;
+        }
+      }
+
+      // Average correction across all ropes and apply
+      if (active.length > 0) {
+        c.x -= totalCorrX / active.length;
+        c.y -= totalCorrY / active.length;
+
+        // Recompute velocity from corrected position delta to avoid energy gain
+        // (implicit velocity update from constraint)
+      }
+    }
+
+    // Reproject velocity to be tangent to the primary rope
+    // This removes the radial component that constraint already handles
+    if (active.length === 1) {
+      const rope = active[0];
+      const dx   = c.x - rope.anchor.x;
+      const dy   = c.y - rope.anchor.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 0.001) {
+        const nx  = dx / dist;
+        const ny  = dy / dist;
+        // Remove radial (along-rope) velocity component
+        const radial = c.vx * nx + c.vy * ny;
+        c.vx -= radial * nx * 0.98;
+        c.vy -= radial * ny * 0.98;
+      }
+    }
   }
 
   function applyMagnet() {
@@ -677,14 +781,44 @@
   // Draw
   // ─────────────────────────────────────────────────
   function drawBackground() {
-    ctx.fillStyle = '#1a0a2e';
+    // Candy kingdom gradient — deep purple top to warm pink bottom
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0,    '#2d0050');
+    grad.addColorStop(0.45, '#6b0080');
+    grad.addColorStop(0.8,  '#c0306a');
+    grad.addColorStop(1,    '#ff66aa');
+    ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
+
+    // Soft ambient glow pools — give depth without gradients flickering
+    const glows = [
+      { x: W * 0.2,  y: H * 0.15, r: W * 0.55, c: 'rgba(160,0,200,0.13)' },
+      { x: W * 0.85, y: H * 0.3,  r: W * 0.4,  c: 'rgba(255,80,160,0.10)' },
+      { x: W * 0.5,  y: H * 0.65, r: W * 0.5,  c: 'rgba(220,0,100,0.09)' },
+      { x: W * 0.1,  y: H * 0.8,  r: W * 0.38, c: 'rgba(255,120,200,0.11)' },
+    ];
+    for (const g of glows) {
+      const rg = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r);
+      rg.addColorStop(0, g.c);
+      rg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = rg;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // Animated bubbles + sparkles on top
     drawBgStars();
-    if (!images.bg) return;
-    const img   = images.bg;
-    const scale = Math.max(W / img.width, H / img.height);
-    const dw = img.width * scale, dh = img.height * scale;
-    ctx.drawImage(img, (W-dw)/2, (H-dh)/2, dw, dh);
+
+    // User background image composited over the top if it exists
+    if (images.bg) {
+      const img   = images.bg;
+      const scale = Math.max(W / img.width, H / img.height);
+      const dw    = img.width  * scale;
+      const dh    = img.height * scale;
+      ctx.save();
+      ctx.globalAlpha = 0.55; // blend over candy kingdom rather than replace it
+      ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+      ctx.restore();
+    }
   }
 
   function drawFloor() {
@@ -699,8 +833,14 @@
       const ax = rope.anchor.x, ay = rope.anchor.y;
       const bx = c.x, by = c.y;
       const mx = (ax+bx)/2, my = (ay+by)/2;
-      const dist = Math.hypot(bx-ax, by-ay);
-      const sagY = Math.min(dist * 0.22, 60);
+
+      // Sag based on rope's natural length vs current straight-line distance
+      // More sag when candy swings inward (rope goes slack)
+      const straightDist = Math.hypot(bx-ax, by-ay);
+      const ropeLen      = rope.length || straightDist;
+      const slack        = Math.max(0, ropeLen - straightDist);
+      const sagY         = Math.min(slack * 0.5 + straightDist * 0.08, 70);
+
       const cpx = mx, cpy = my + sagY;
       const alpha = rope.pending ? 0.45 : 1;
 
@@ -709,37 +849,28 @@
 
       // Outer body
       ctx.beginPath();
-      ctx.moveTo(ax, ay);
-      ctx.quadraticCurveTo(cpx, cpy, bx, by);
-      ctx.strokeStyle = '#c8a84b';
-      ctx.lineWidth   = 7;
-      ctx.lineCap     = 'round';
+      ctx.moveTo(ax, ay); ctx.quadraticCurveTo(cpx, cpy, bx, by);
+      ctx.strokeStyle = '#c8a84b'; ctx.lineWidth = 7; ctx.lineCap = 'round';
       ctx.stroke();
 
       // Inner highlight
       ctx.beginPath();
-      ctx.moveTo(ax, ay);
-      ctx.quadraticCurveTo(cpx, cpy, bx, by);
-      ctx.strokeStyle = '#f0d070';
-      ctx.lineWidth   = 3;
+      ctx.moveTo(ax, ay); ctx.quadraticCurveTo(cpx, cpy, bx, by);
+      ctx.strokeStyle = '#f0d070'; ctx.lineWidth = 3;
       ctx.stroke();
 
       // Braided twist
       ctx.setLineDash([6, 10]);
       ctx.lineDashOffset = (state.lastTime * 0.02) % 16;
       ctx.beginPath();
-      ctx.moveTo(ax, ay);
-      ctx.quadraticCurveTo(cpx, cpy, bx, by);
-      ctx.strokeStyle = 'rgba(255,245,200,0.35)';
-      ctx.lineWidth   = 2;
+      ctx.moveTo(ax, ay); ctx.quadraticCurveTo(cpx, cpy, bx, by);
+      ctx.strokeStyle = 'rgba(255,245,200,0.35)'; ctx.lineWidth = 2;
       ctx.stroke();
       ctx.setLineDash([]);
 
       // Anchor dot
       ctx.fillStyle = '#fff6cf';
-      ctx.beginPath();
-      ctx.arc(ax, ay, 7, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.beginPath(); ctx.arc(ax, ay, 7, 0, Math.PI*2); ctx.fill();
 
       ctx.restore();
     }
