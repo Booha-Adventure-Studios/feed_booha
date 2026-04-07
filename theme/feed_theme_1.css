@@ -1,71 +1,67 @@
 
 /* =====================================================
-   Feed Booha — Theme (v2)
-   Fixes:
-   [FIX] topbar-actions missing flex + gap
-   [FIX] start overlay transition timing
-   [NEW] star rating styling
-   [NEW] start-list custom icons
-   [NEW] cta-btn active scale feedback
+   Feed Booha — Theme (v3)  Portrait layout
 ===================================================== */
 * { box-sizing: border-box; }
 
 html, body {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-  background: #000;
+  margin: 0; padding: 0;
+  width: 100%; height: 100%;
+  background: #1a0a2e;
   font-family: system-ui, -apple-system, sans-serif;
+  overflow: hidden;
 }
 
 .app-shell {
   position: relative;
+  width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+/* ── Portrait canvas container ─────────────────── */
+/* Canvas is 540×960. We scale it to fit the screen
+   while keeping the 9:16 ratio. */
+.game-wrap {
+  position: relative;
   width: 100%;
-  height: 100%;
+  max-width: 540px;
+  /* Maintain 9:16 aspect ratio */
+  aspect-ratio: 9 / 16;
+  flex-shrink: 0;
   overflow: hidden;
 }
 
-.bg-layer {
+canvas {
   position: absolute;
-  inset: 0;
-  background: url('../assets/img/feed_booha-1.png') center/cover no-repeat;
-  filter: brightness(0.9);
-  z-index: 0;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: block;
+  touch-action: none;
 }
 
-/* ================= TOP BAR ================= */
+/* ── Top bar ────────────────────────────────────── */
 .topbar {
   position: absolute;
-  top: 0;
-  left: 0;
+  top: 0; left: 0;
   width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 16px;
+  padding: 10px 14px;
   z-index: 10;
+  pointer-events: none;
 }
 
-.title-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
+.topbar > * { pointer-events: auto; }
 
-.game-title {
-  margin: 0;
-  font-size: 18px;
-  color: #fff;
-}
+.title-stack { display: flex; flex-direction: column; gap: 1px; }
 
-.game-subtitle {
-  margin: 0;
-  font-size: 12px;
-  color: rgba(255,255,255,0.6);
-}
+.game-title    { margin: 0; font-size: 17px; color: #fff; font-weight: 600; }
+.game-subtitle { margin: 0; font-size: 11px; color: rgba(255,255,255,0.55); }
 
-/* [FIX] topbar-actions was missing flex + gap — buttons were stacking */
 .topbar-actions {
   display: flex;
   align-items: center;
@@ -79,70 +75,47 @@ html, body {
   padding: 6px 10px;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 14px;
-  transition: background 0.15s;
+  font-size: 13px;
+  transition: background 0.15s, transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
 }
-
 .ui-btn:hover  { background: rgba(255,255,255,0.2); }
-.ui-btn:active { transform: scale(0.96); }
+.ui-btn:active { transform: scale(0.95); }
+.ui-btn--ghost { background: transparent; }
 
-.ui-btn--ghost {
-  background: transparent;
-  border: 1px solid rgba(255,255,255,0.2);
-}
-
-/* ================= GAME AREA ================= */
-.game-wrap {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  z-index: 1;
-}
-
-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-}
-
-/* ================= HUD ================= */
+/* ── HUD ────────────────────────────────────────── */
 .hud {
   position: absolute;
-  bottom: 16px;
+  bottom: 14px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 10px;
+  gap: 8px;
   z-index: 10;
+  pointer-events: none;
 }
 
 .hud-pill {
   background: rgba(0,0,0,0.5);
   color: #fff;
-  padding: 6px 10px;
+  padding: 5px 9px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 11px;
   white-space: nowrap;
 }
 
-.hud-label {
-  opacity: 0.7;
-  margin-right: 4px;
-}
+.hud-label { opacity: 0.65; margin-right: 3px; }
 
-/* ================= OVERLAYS ================= */
+/* ── Overlays ────────────────────────────────────── */
 .overlay {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0,0,0,0.6);
+  background: rgba(0,0,0,0.65);
   opacity: 0;
   pointer-events: none;
-  /* [FIX] transition must match the setTimeout(280) in startGame() */
   transition: opacity 0.25s ease;
   z-index: 20;
 }
@@ -153,67 +126,51 @@ canvas {
 }
 
 .overlay-card {
-  background: #111;
+  background: #1e1030;
   color: #fff;
-  padding: 24px 20px 20px;
-  border-radius: 16px;
-  max-width: 320px;
-  width: 90%;
+  padding: 26px 22px 20px;
+  border-radius: 20px;
+  max-width: 300px;
+  width: 88%;
   text-align: center;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.1);
 }
 
-.overlay-card h2 {
-  margin: 0 0 8px;
-  font-size: 22px;
-}
+.overlay-card h2 { margin: 0 0 8px; font-size: 22px; }
 
 .overlay-card p {
   margin: 0 0 16px;
   font-size: 14px;
-  color: rgba(255,255,255,0.75);
-  line-height: 1.5;
+  color: rgba(255,255,255,0.72);
+  line-height: 1.55;
 }
 
-.overlay-card--small {
-  max-width: 260px;
-}
+.overlay-card--small { max-width: 260px; }
 
-/* ================= START LIST ================= */
-/* [NEW] Custom icons instead of plain bullets */
+/* ── Start list ──────────────────────────────────── */
 .start-list {
   list-style: none;
-  padding: 0;
-  margin: 0 0 20px;
+  padding: 0; margin: 0 0 20px;
   text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: flex; flex-direction: column; gap: 9px;
 }
 
 .start-list li {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  font-size: 13px;
-  color: rgba(255,255,255,0.8);
-  line-height: 1.4;
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 13px; color: rgba(255,255,255,0.8); line-height: 1.4;
 }
 
 .start-list li::before {
   content: '';
   display: inline-block;
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  margin-top: 1px;
+  width: 18px; height: 18px;
+  flex-shrink: 0; margin-top: 1px;
   background-repeat: no-repeat;
   background-position: center;
   background-size: contain;
 }
 
 .start-list li:nth-child(1)::before {
-  /* Scissors icon — CSS clip trick */
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff66cc' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6' cy='6' r='3'/%3E%3Ccircle cx='6' cy='18' r='3'/%3E%3Cline x1='20' y1='4' x2='8.12' y2='15.88'/%3E%3Cline x1='14.47' y1='14.48' x2='20' y2='20'/%3E%3Cline x1='8.12' y1='8.12' x2='12' y2='12'/%3E%3C/svg%3E");
 }
 
@@ -225,21 +182,21 @@ canvas {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234fc' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='1 4 1 10 7 10'/%3E%3Cpath d='M3.51 15a9 9 0 1 0 .49-3.1'/%3E%3C/svg%3E");
 }
 
-/* ================= BUTTONS ================= */
+/* ── Buttons ─────────────────────────────────────── */
 .cta-btn {
   background: #ff66cc;
   color: #fff;
   border: none;
-  padding: 10px 20px;
-  border-radius: 10px;
+  padding: 11px 22px;
+  border-radius: 12px;
   cursor: pointer;
-  font-weight: bold;
+  font-weight: 700;
   font-size: 15px;
   transition: background 0.15s, transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
 }
-
 .cta-btn:hover  { background: #ff4db8; }
-.cta-btn:active { transform: scale(0.96); }
+.cta-btn:active { transform: scale(0.95); }
 
 .message-actions {
   display: flex;
@@ -248,8 +205,7 @@ canvas {
   margin-top: 12px;
 }
 
-/* ================= STAR RATING ================= */
-/* [NEW] stars injected by JS into message overlay */
+/* ── Star rating ─────────────────────────────────── */
 #starRating {
   display: flex;
   justify-content: center;
@@ -259,14 +215,14 @@ canvas {
   letter-spacing: 2px;
 }
 
-/* ================= HELP ================= */
+/* ── Help panel ──────────────────────────────────── */
 .help-panel {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0,0,0,0.7);
+  background: rgba(0,0,0,0.72);
   z-index: 30;
   opacity: 0;
   pointer-events: none;
@@ -279,40 +235,22 @@ canvas {
 }
 
 .help-card {
-  background: #111;
+  background: #1e1030;
   color: #fff;
   padding: 24px 20px 20px;
-  border-radius: 16px;
-  max-width: 320px;
-  width: 90%;
+  border-radius: 20px;
+  max-width: 300px;
+  width: 88%;
   text-align: center;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.1);
 }
 
-.help-card h2 {
-  margin: 0 0 10px;
-  font-size: 20px;
-}
+.help-card h2  { margin: 0 0 10px; font-size: 20px; }
+.help-card p   { font-size: 14px; color: rgba(255,255,255,0.72); margin: 0 0 12px; }
+.help-card ul  { text-align: left; padding-left: 18px; margin: 0 0 16px; font-size: 13px; color: rgba(255,255,255,0.8); line-height: 1.7; }
 
-.help-card p {
-  font-size: 14px;
-  color: rgba(255,255,255,0.75);
-  margin: 0 0 12px;
-}
-
-.help-card ul {
-  text-align: left;
-  padding-left: 18px;
-  margin: 0 0 16px;
-  font-size: 13px;
-  color: rgba(255,255,255,0.8);
-  line-height: 1.7;
-}
-
-/* ================= RESPONSIVE ================= */
-@media (max-width: 480px) {
-  .hud { gap: 6px; }
-  .hud-pill { font-size: 11px; padding: 5px 8px; }
-  .game-title { font-size: 16px; }
-  .overlay-card { padding: 20px 16px 16px; }
+/* ── Responsive: full viewport on small phones ───── */
+@media (max-width: 400px) {
+  .game-wrap { max-width: 100%; }
+  .hud-pill  { font-size: 10px; padding: 4px 7px; }
 }
