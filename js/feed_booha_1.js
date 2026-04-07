@@ -760,16 +760,11 @@
   // Draw
   // ─────────────────────────────────────────────────
   function drawBackground() {
-    // Layer 1 — candy kingdom gradient (always visible at edges / if no image)
-    const grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0,    '#2d0050');
-    grad.addColorStop(0.45, '#6b0080');
-    grad.addColorStop(0.8,  '#c0306a');
-    grad.addColorStop(1,    '#ff66aa');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W, H);
+    // Canvas is transparent — body CSS supplies the candy kingdom gradient.
+    // Layer 1 — bubbles and sparkles (under the game image)
+    drawBgStars();
 
-    // Layer 2 — user background image (cover-fit, full opacity, on top of gradient)
+    // Layer 2 — game background image on top of bubbles, full opacity
     if (images.bg) {
       const img   = images.bg;
       const scale = Math.max(W / img.width, H / img.height);
@@ -777,9 +772,6 @@
       const dh    = img.height * scale;
       ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
     }
-
-    // Layer 3 — candy kingdom bubble/sparkle effects float over image
-    drawBgStars();
   }
 
   function drawFloor() {
