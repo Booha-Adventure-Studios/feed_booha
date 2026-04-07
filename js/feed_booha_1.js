@@ -34,7 +34,12 @@
   const messageTitle = document.getElementById('messageTitle');
   const messageText  = document.getElementById('messageText');
 
-  const LEVELS = window.FEED_BOOHA_LEVELS || [];
+  const rawLevel = LEVELS[index] || LEVELS[0];
+if (!rawLevel) {
+  console.error('No valid level data found.');
+  return;
+}
+const level = cloneLevel(rawLevel);
 
   const W = canvas.width;
   const H = canvas.height;
@@ -202,12 +207,18 @@
     setHud(index + 1, 'Ready');
   }
 
+ 
   function startGame() {
-    state.started = true;
-    startOverlay.classList.remove('overlay--show');
-    startOverlay.setAttribute('aria-hidden', 'true');
-    buildLevel(state.levelIndex);
+  if (!LEVELS.length) {
+    console.error('No levels found. Check feed_booha_levels_1.js');
+    return;
   }
+
+  state.started = true;
+  startOverlay.classList.remove('overlay--show');
+  startOverlay.setAttribute('aria-hidden', 'true');
+  buildLevel(state.levelIndex);
+}
 
   function resetLevel() {
     buildLevel(state.levelIndex);
