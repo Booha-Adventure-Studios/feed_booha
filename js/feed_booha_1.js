@@ -27,7 +27,7 @@
   const nextBtn      = document.getElementById('nextBtn');
   const helpBtn      = document.getElementById('helpBtn');
   const closeHelpBtn = document.getElementById('closeHelpBtn');
-
+  const LEVELS = window.FEED_BOOHA_LEVELS || [];
   const levelText   = document.getElementById('levelText');
   const goalText    = document.getElementById('goalText');
   const stateText   = document.getElementById('stateText');
