@@ -81,7 +81,12 @@
     get2:    './assets/audio/get-2.mp3',
     get3:    './assets/audio/get-3.mp3',
     get4:    './assets/audio/get-4.mp3',
-    miss1:   './assets/audio/miss-1.mp3',
+    miss2:   './assets/audio/miss-2.mp3',
+    miss3:   './assets/audio/miss-3.mp3',
+    miss4:   './assets/audio/miss-4.mp3',
+    miss5:   './assets/audio/miss-5.mp3',
+    miss6:   './assets/audio/miss-6.mp3',
+    miss7:   './assets/audio/miss-7.mp3',
     bounce1: './assets/audio/bounce-1.mp3'
   };
 
@@ -317,9 +322,11 @@
     state.boohaJumpOffset = 0;
     state.boohaJumpFrame  = 0;
 
+    // Kick candy sideways toward center so pendulum swings immediately
+    const kickDir = level.candy.x >= W / 2 ? -1 : 1;
     state.candy = {
       x: level.candy.x, y: level.candy.y,
-      vx: 0, vy: 0,
+      vx: kickDir * 1.8, vy: 0,
       r: CANDY_R, attached: true, alive: true
     };
 
@@ -645,7 +652,8 @@
     state.missDir     = c.x < mouth.x ? -1 : 1;
     state.boohaSprite = 'booSad';
     setHud(state.levelIndex + 1, 'Miss');
-    playSfx('miss1');
+    const missSfx = ['miss2','miss3','miss4','miss5','miss6','miss7'];
+    playSfx(missSfx[Math.floor(Math.random() * missSfx.length)]);
 
     state.pendingFailTimeout = setTimeout(() => {
       showMessage('Oops!', 'Booha missed the candy.', false);
@@ -805,20 +813,17 @@
       ctx.fillRect(0, 0, W, H);
     }
 
-    // Animated bubbles + sparkles on top
-    drawBgStars();
-
-    // User background image composited over the top if it exists
+    // User background image sits ABOVE the gradient, BELOW the bubbles
     if (images.bg) {
       const img   = images.bg;
       const scale = Math.max(W / img.width, H / img.height);
       const dw    = img.width  * scale;
       const dh    = img.height * scale;
-      ctx.save();
-      ctx.globalAlpha = 0.55; // blend over candy kingdom rather than replace it
       ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
-      ctx.restore();
     }
+
+    // Animated bubbles + sparkles float over the bg image
+    drawBgStars();
   }
 
   function drawFloor() {
