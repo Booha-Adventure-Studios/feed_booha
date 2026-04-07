@@ -1,1 +1,203 @@
 
+/* =====================================================
+   Feed Booha — Theme (v1)
+   Clean, readable, no overdesign
+===================================================== */
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.app-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.bg-layer {
+  position: absolute;
+  inset: 0;
+  background: url('../assets/img/feed_booha-1.png') center/cover no-repeat;
+  filter: brightness(0.9);
+  z-index: 0;
+}
+
+/* ================= TOP BAR ================= */
+
+.topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  z-index: 10;
+}
+
+.game-title {
+  margin: 0;
+  font-size: 18px;
+  color: #fff;
+}
+
+.game-subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(255,255,255,0.6);
+}
+
+.ui-btn {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.2);
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.ui-btn:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+/* ================= GAME AREA ================= */
+
+.game-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* ================= HUD ================= */
+
+.hud {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  z-index: 10;
+}
+
+.hud-pill {
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.hud-label {
+  opacity: 0.7;
+  margin-right: 4px;
+}
+
+/* ================= OVERLAYS ================= */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.6);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+  z-index: 20;
+}
+
+.overlay--show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.overlay-card {
+  background: #111;
+  color: #fff;
+  padding: 20px;
+  border-radius: 16px;
+  max-width: 320px;
+  text-align: center;
+}
+
+.overlay-card h2 {
+  margin-top: 0;
+}
+
+.overlay-card--small {
+  max-width: 260px;
+}
+
+.cta-btn {
+  background: #ff66cc;
+  color: #fff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.cta-btn:hover {
+  background: #ff4db8;
+}
+
+.message-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.ui-btn--ghost {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.2);
+}
+
+/* ================= HELP ================= */
+
+.help-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.7);
+  z-index: 30;
+}
+
+.help-card {
+  background: #111;
+  color: #fff;
+  padding: 20px;
+  border-radius: 16px;
+  max-width: 320px;
+  text-align: center;
+}
+
+.help-card ul {
+  text-align: left;
+  padding-left: 18px;
+}
