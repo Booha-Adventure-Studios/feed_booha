@@ -1,12 +1,14 @@
 
 /* =====================================================
-   Feed Booha — Theme (v1)
-   Clean, readable, no overdesign
+   Feed Booha — Theme (v2)
+   Fixes:
+   [FIX] topbar-actions missing flex + gap
+   [FIX] start overlay transition timing
+   [NEW] star rating styling
+   [NEW] start-list custom icons
+   [NEW] cta-btn active scale feedback
 ===================================================== */
-
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 html, body {
   margin: 0;
@@ -33,7 +35,6 @@ html, body {
 }
 
 /* ================= TOP BAR ================= */
-
 .topbar {
   position: absolute;
   top: 0;
@@ -44,6 +45,12 @@ html, body {
   align-items: center;
   padding: 10px 16px;
   z-index: 10;
+}
+
+.title-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .game-title {
@@ -58,6 +65,13 @@ html, body {
   color: rgba(255,255,255,0.6);
 }
 
+/* [FIX] topbar-actions was missing flex + gap — buttons were stacking */
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .ui-btn {
   background: rgba(255,255,255,0.1);
   color: #fff;
@@ -65,14 +79,19 @@ html, body {
   padding: 6px 10px;
   border-radius: 8px;
   cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s;
 }
 
-.ui-btn:hover {
-  background: rgba(255,255,255,0.2);
+.ui-btn:hover  { background: rgba(255,255,255,0.2); }
+.ui-btn:active { transform: scale(0.96); }
+
+.ui-btn--ghost {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.2);
 }
 
 /* ================= GAME AREA ================= */
-
 .game-wrap {
   position: relative;
   width: 100%;
@@ -89,7 +108,6 @@ canvas {
 }
 
 /* ================= HUD ================= */
-
 .hud {
   position: absolute;
   bottom: 16px;
@@ -106,6 +124,7 @@ canvas {
   padding: 6px 10px;
   border-radius: 999px;
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .hud-label {
@@ -114,7 +133,6 @@ canvas {
 }
 
 /* ================= OVERLAYS ================= */
-
 .overlay {
   position: absolute;
   inset: 0;
@@ -124,6 +142,7 @@ canvas {
   background: rgba(0,0,0,0.6);
   opacity: 0;
   pointer-events: none;
+  /* [FIX] transition must match the setTimeout(280) in startGame() */
   transition: opacity 0.25s ease;
   z-index: 20;
 }
@@ -136,48 +155,111 @@ canvas {
 .overlay-card {
   background: #111;
   color: #fff;
-  padding: 20px;
+  padding: 24px 20px 20px;
   border-radius: 16px;
   max-width: 320px;
+  width: 90%;
   text-align: center;
+  border: 1px solid rgba(255,255,255,0.08);
 }
 
 .overlay-card h2 {
-  margin-top: 0;
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.overlay-card p {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: rgba(255,255,255,0.75);
+  line-height: 1.5;
 }
 
 .overlay-card--small {
   max-width: 260px;
 }
 
+/* ================= START LIST ================= */
+/* [NEW] Custom icons instead of plain bullets */
+.start-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.start-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.8);
+  line-height: 1.4;
+}
+
+.start-list li::before {
+  content: '';
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+.start-list li:nth-child(1)::before {
+  /* Scissors icon — CSS clip trick */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff66cc' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6' cy='6' r='3'/%3E%3Ccircle cx='6' cy='18' r='3'/%3E%3Cline x1='20' y1='4' x2='8.12' y2='15.88'/%3E%3Cline x1='14.47' y1='14.48' x2='20' y2='20'/%3E%3Cline x1='8.12' y1='8.12' x2='12' y2='12'/%3E%3C/svg%3E");
+}
+
+.start-list li:nth-child(2)::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffcc00' stroke='%23ffcc00' stroke-width='1'%3E%3Cpolygon points='12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2'/%3E%3C/svg%3E");
+}
+
+.start-list li:nth-child(3)::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234fc' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='1 4 1 10 7 10'/%3E%3Cpath d='M3.51 15a9 9 0 1 0 .49-3.1'/%3E%3C/svg%3E");
+}
+
+/* ================= BUTTONS ================= */
 .cta-btn {
   background: #ff66cc;
   color: #fff;
   border: none;
-  padding: 10px 16px;
+  padding: 10px 20px;
   border-radius: 10px;
   cursor: pointer;
   font-weight: bold;
+  font-size: 15px;
+  transition: background 0.15s, transform 0.1s;
 }
 
-.cta-btn:hover {
-  background: #ff4db8;
-}
+.cta-btn:hover  { background: #ff4db8; }
+.cta-btn:active { transform: scale(0.96); }
 
 .message-actions {
   display: flex;
   justify-content: center;
   gap: 10px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
-.ui-btn--ghost {
-  background: transparent;
-  border: 1px solid rgba(255,255,255,0.2);
+/* ================= STAR RATING ================= */
+/* [NEW] stars injected by JS into message overlay */
+#starRating {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 8px 0 4px;
+  font-size: 28px;
+  letter-spacing: 2px;
 }
 
 /* ================= HELP ================= */
-
 .help-panel {
   position: absolute;
   inset: 0;
@@ -191,13 +273,38 @@ canvas {
 .help-card {
   background: #111;
   color: #fff;
-  padding: 20px;
+  padding: 24px 20px 20px;
   border-radius: 16px;
   max-width: 320px;
+  width: 90%;
   text-align: center;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.help-card h2 {
+  margin: 0 0 10px;
+  font-size: 20px;
+}
+
+.help-card p {
+  font-size: 14px;
+  color: rgba(255,255,255,0.75);
+  margin: 0 0 12px;
 }
 
 .help-card ul {
   text-align: left;
   padding-left: 18px;
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.8);
+  line-height: 1.7;
+}
+
+/* ================= RESPONSIVE ================= */
+@media (max-width: 480px) {
+  .hud { gap: 6px; }
+  .hud-pill { font-size: 11px; padding: 5px 8px; }
+  .game-title { font-size: 16px; }
+  .overlay-card { padding: 20px 16px 16px; }
 }
