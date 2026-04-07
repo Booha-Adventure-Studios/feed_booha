@@ -34,12 +34,7 @@
   const messageTitle = document.getElementById('messageTitle');
   const messageText  = document.getElementById('messageText');
 
-  const rawLevel = LEVELS[index] || LEVELS[0];
-if (!rawLevel) {
-  console.error('No valid level data found.');
-  return;
-}
-const level = cloneLevel(rawLevel);
+
 
   const W = canvas.width;
   const H = canvas.height;
@@ -161,28 +156,33 @@ const level = cloneLevel(rawLevel);
   }
 
   function buildLevel(index) {
-    stopAllTimers();
+  stopAllTimers();
 
-    const level = cloneLevel(LEVELS[index] || LEVELS[0]);
-    state.currentLevel = level;
-    state.cutCount = 0;
-    state.won = false;
-    state.lost = false;
-    state.running = true;
-    state.boohaSprite = 'booWait';
-    state.effectTimers.length = 0;
-    state.bounceCooldown = 0;
+  const rawLevel = LEVELS[index] || LEVELS[0];
+  if (!rawLevel) {
+    console.error('No valid level data found.');
+    return;
+  }
+  const level = cloneLevel(rawLevel);
 
-    state.candy = {
-      x: level.candy.x,
-      y: level.candy.y,
-      vx: 0,
-      vy: 0,
-      r: CANDY_R,
-      attached: true,
-      alive: true
-    };
+  state.currentLevel = level;
+  state.cutCount = 0;
+  state.won = false;
+  state.lost = false;
+  state.running = true;
+  state.boohaSprite = 'booWait';
+  state.effectTimers.length = 0;
+  state.bounceCooldown = 0;
 
+  state.candy = {
+    x: level.candy.x,
+    y: level.candy.y,
+    vx: 0,
+    vy: 0,
+    r: CANDY_R,
+    attached: true,
+    alive: true
+  };
     state.ropes = (level.ropes || []).map((rope) => ({
       id: rope.id,
       anchor: { x: rope.anchor.x, y: rope.anchor.y },
