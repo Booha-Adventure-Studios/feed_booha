@@ -1,93 +1,153 @@
 
 // =====================================================
-// Feed Booha — Level Data (v1)
+// Feed Booha — Level Data (v3)  Portrait 540×960
 // =====================================================
-// Pure data only. No logic.
-// The engine reads this.
+// Canvas: 540 wide × 960 tall
+// Booha sits near bottom ~y:800
+// Candy starts upper third ~y:200–320
+// New rope types: 'normal' | 'delayed'
+// New object types: 'bounce' | 'fan'
+// =====================================================
 
 const FEED_BOOHA_LEVELS = [
 
-  // -------------------------------------------------
-  // Level 1 — Simple Drop
-  // -------------------------------------------------
+  // Level 1 — Simple Drop  (teach the cut)
   {
     id: 1,
-    candy: { x: 640, y: 200, type: 'normal' },
-    booha: { x: 640, y: 600, behavior: 'idle' },
+    candy: { x: 270, y: 220 },
+    booha: { x: 270, y: 800, behavior: 'idle' },
     ropes: [
-      { id: 'r1', anchor: { x: 640, y: 100 } }
+      { id: 'r1', anchor: { x: 270, y: 100 }, type: 'normal' }
     ],
     objects: []
   },
 
-  // -------------------------------------------------
-  // Level 2 — Offset Drop
-  // -------------------------------------------------
+  // Level 2 — Offset drop  (aim matters)
   {
     id: 2,
-    candy: { x: 500, y: 200, type: 'normal' },
-    booha: { x: 700, y: 600, behavior: 'idle' },
+    candy: { x: 200, y: 230 },
+    booha: { x: 340, y: 800, behavior: 'idle' },
     ropes: [
-      { id: 'r1', anchor: { x: 500, y: 100 } }
+      { id: 'r1', anchor: { x: 200, y: 100 }, type: 'normal' }
     ],
     objects: []
   },
 
-  // -------------------------------------------------
-  // Level 3 — Two Ropes (Timing)
-  // -------------------------------------------------
+  // Level 3 — Two ropes  (cut order matters)
   {
     id: 3,
-    candy: { x: 640, y: 250, type: 'normal' },
-    booha: { x: 640, y: 600, behavior: 'idle' },
+    candy: { x: 270, y: 270 },
+    booha: { x: 270, y: 800, behavior: 'idle' },
     ropes: [
-      { id: 'r1', anchor: { x: 540, y: 150 } },
-      { id: 'r2', anchor: { x: 740, y: 150 } }
+      { id: 'r1', anchor: { x: 160, y: 130 }, type: 'normal' },
+      { id: 'r2', anchor: { x: 380, y: 130 }, type: 'normal' }
     ],
     objects: []
   },
 
-  // -------------------------------------------------
-  // Level 4 — Bounce Pad
-  // -------------------------------------------------
+  // Level 4 — Bounce pad  (trajectory + platform)
   {
     id: 4,
-    candy: { x: 500, y: 200, type: 'normal' },
-    booha: { x: 800, y: 600, behavior: 'idle' },
+    candy: { x: 180, y: 230 },
+    booha: { x: 360, y: 800, behavior: 'idle' },
     ropes: [
-      { id: 'r1', anchor: { x: 500, y: 100 } }
+      { id: 'r1', anchor: { x: 180, y: 110 }, type: 'normal' }
     ],
     objects: [
-      {
-        type: 'bounce',
-        x: 650,
-        y: 500,
-        width: 120,
-        height: 20
-      }
+      { type: 'bounce', x: 310, y: 580, width: 120, height: 20 }
     ]
   },
 
-  // -------------------------------------------------
-  // Level 5 — Moving Booha
-  // -------------------------------------------------
+  // Level 5 — Moving Booha  (timing)
   {
     id: 5,
-    candy: { x: 640, y: 200, type: 'normal' },
+    candy: { x: 270, y: 220 },
     booha: {
-      x: 640,
-      y: 600,
+      x: 270, y: 800,
       behavior: 'horizontal',
-      range: { min: 500, max: 780 },
+      range: { min: 160, max: 380 },
       speed: 2
     },
     ropes: [
-      { id: 'r1', anchor: { x: 640, y: 100 } }
+      { id: 'r1', anchor: { x: 270, y: 100 }, type: 'normal' }
     ],
     objects: []
+  },
+
+  // Level 6 — Delayed cut  (new mechanic intro)
+  {
+    id: 6,
+    candy: { x: 270, y: 250 },
+    booha: { x: 270, y: 800, behavior: 'idle' },
+    ropes: [
+      { id: 'r1', anchor: { x: 270, y: 100 }, type: 'delayed', delayMs: 450 }
+    ],
+    objects: []
+  },
+
+  // Level 7 — Fan redirect  (player control)
+  {
+    id: 7,
+    candy: { x: 160, y: 230 },
+    booha: { x: 380, y: 800, behavior: 'idle' },
+    ropes: [
+      { id: 'r1', anchor: { x: 160, y: 110 }, type: 'normal' }
+    ],
+    objects: [
+      { type: 'fan', x: 200, y: 620, direction: 'right' }
+    ]
+  },
+
+  // Level 8 — Two ropes + moving Booha  (judgment call)
+  {
+    id: 8,
+    candy: { x: 270, y: 280 },
+    booha: {
+      x: 200, y: 800,
+      behavior: 'horizontal',
+      range: { min: 140, max: 400 },
+      speed: 2.4
+    },
+    ropes: [
+      { id: 'r1', anchor: { x: 160, y: 130 }, type: 'normal' },
+      { id: 'r2', anchor: { x: 380, y: 130 }, type: 'normal' }
+    ],
+    objects: []
+  },
+
+  // Level 9 — Bounce + fan combo  (multi-step)
+  {
+    id: 9,
+    candy: { x: 140, y: 230 },
+    booha: { x: 400, y: 800, behavior: 'idle' },
+    ropes: [
+      { id: 'r1', anchor: { x: 140, y: 110 }, type: 'normal' }
+    ],
+    objects: [
+      { type: 'bounce', x: 220, y: 560, width: 110, height: 20 },
+      { type: 'fan',    x: 300, y: 480, direction: 'right' }
+    ]
+  },
+
+  // Level 10 — Everything  (full challenge)
+  {
+    id: 10,
+    candy: { x: 270, y: 260 },
+    booha: {
+      x: 270, y: 800,
+      behavior: 'horizontal',
+      range: { min: 150, max: 390 },
+      speed: 2.6
+    },
+    ropes: [
+      { id: 'r1', anchor: { x: 160, y: 120 }, type: 'normal' },
+      { id: 'r2', anchor: { x: 380, y: 120 }, type: 'delayed', delayMs: 400 }
+    ],
+    objects: [
+      { type: 'bounce', x: 270, y: 540, width: 100, height: 20 }
+    ]
   }
 
 ];
 
-// Make global (simple for now)
 window.FEED_BOOHA_LEVELS = FEED_BOOHA_LEVELS;
