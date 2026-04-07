@@ -1,19 +1,17 @@
 
 // =====================================================
-// Feed Booha — Engine (v3)
+// Feed Booha — Engine (v4)
 // =====================================================
-// Portrait mode (540×960)
-// [NEW] Cover-fit background rendering
-// [NEW] Animated star particle bg layer
-// [NEW] Catenary rope with braided highlight
-// [NEW] Booha horizontal patrol with edge ease
-// [NEW] Magnet pull assist near mouth
-// [NEW] Candy trail when fast
-// [NEW] Screen shake on bounce
-// [NEW] Booha last-chance jump
-// [NEW] Fan object (tap for side push)
-// [NEW] Delayed-cut rope type
-// [NEW] Booha reacts toward miss direction
+// FIXES:
+//   • Bubbles/sparkles now draw OVER the bg image
+//   • Fan timer uses ms correctly (not frames)
+//   • Booha horizontal patrol edgeFactor fixed
+//   • Two-rope pendulum gets asymmetric kick + better swing
+//   • Procedural Web Audio sounds (no missing files needed)
+//   • Miss sounds removed; cute synth bleeps added
+//   • No retry prompt on 3-star wins
+//   • HUD: stars counter added bottom-right
+//   • Start overlay: bilingual + glowing
 // =====================================================
 
 (() => {
@@ -37,6 +35,7 @@
   const stateText      = document.getElementById('stateText');
   const messageTitle   = document.getElementById('messageTitle');
   const messageText    = document.getElementById('messageText');
+  const totalStarsEl   = document.getElementById('totalStars');
 
   let starContainer = null;
 
@@ -63,7 +62,6 @@
   const slashEffects = [];
 
   const images = {};
-  const sounds = {};
 
   const imageSources = {
     bg:           './assets/img/feed_booha-1.png',
@@ -76,16 +74,93 @@
     candy:        './assets/img/candy.png'
   };
 
-  const audioSources = {
-    get1:    './assets/audio/get-1.mp3',
-    get2:    './assets/audio/get-2.mp3',
-    get3:    './assets/audio/get-3.mp3',
-    get4:    './assets/audio/get-4.mp3',
-    miss1:   './assets/audio/miss-1.mp3',
-    miss2:   './assets/audio/miss-2.mp3',
-    miss3:   './assets/audio/miss-3.mp3',
-    bounce1: './assets/audio/bounce-1.mp3'
-  };
+  // ─────────────────────────────────────────────────
+  // Web Audio — procedural sounds, no files needed
+  // ─────────────────────────────────────────────────
+  let audioCtx = null;
+
+  function getAudioCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function playTone({ freq = 440, freq2 = null, type = 'sine', gain = 0.35, duration = 0.18,
+                      attack = 0.01, decay = 0.08, sustain = 0.4, release = 0.1,
+                      detune = 0, delay = 0 } = {}) {
+    try {
+      const ac  = getAudioCtx();
+      const osc = ac.createOscillator();
+      const env = ac.createGain();
+      osc.connect(env);
+      env.connect(ac.destination);
+      osc.type    = type;
+      osc.frequency.setValueAtTime(freq, ac.currentTime + delay);
+      if (freq2) osc.frequency.linearRampToValueAtTime(freq2, ac.currentTime + delay + duration * 0.6);
+      osc.detune.setValueAtTime(detune, ac.currentTime);
+      const t0 = ac.currentTime + delay;
+      env.gain.setValueAtTime(0, t0);
+      env.gain.linearRampToValueAtTime(gain, t0 + attack);
+      env.gain.linearRampToValueAtTime(gain * sustain, t0 + attack + decay);
+      env.gain.setValueAtTime(gain * sustain, t0 + duration - release);
+      env.gain.linearRampToValueAtTime(0, t0 + duration);
+      osc.start(t0);
+      osc.stop(t0 + duration + 0.01);
+    } catch(e) {}
+  }
+
+  // Cute falling whistle: pitch drops as candy falls
+  function playSfxFall() {
+    playTone({ freq: 660, freq2: 320, type: 'sine', gain: 0.22, duration: 0.35, attack: 0.01, decay: 0.1, sustain: 0.6, release: 0.12 });
+  }
+
+  // Rope cut: quick snappy pop
+  function playSfxCut() {
+    playTone({ freq: 900, freq2: 400, type: 'square', gain: 0.18, duration: 0.12, attack: 0.005, decay: 0.04, sustain: 0.2, release: 0.06 });
+    playTone({ freq: 1200, type: 'sine', gain: 0.12, duration: 0.08, attack: 0.005, decay: 0.03, sustain: 0.1, release: 0.04, delay: 0.03 });
+  }
+
+  // Catch / eat: ascending happy bleep
+  function playSfxEat() {
+    [0, 0.1, 0.2, 0.32].forEach((d, i) => {
+      const notes = [523, 659, 784, 1047];
+      playTone({ freq: notes[i], type: 'sine', gain: 0.28 - i * 0.03, duration: 0.18, attack: 0.01, decay: 0.05, sustain: 0.5, release: 0.08, delay: d });
+    });
+  }
+
+  // Win jingle: short triumphant arp
+  function playSfxWin() {
+    [0, 0.14, 0.28, 0.42, 0.52].forEach((d, i) => {
+      const notes = [523, 659, 784, 1047, 1319];
+      playTone({ freq: notes[i], type: 'triangle', gain: 0.25, duration: 0.22, attack: 0.01, decay: 0.06, sustain: 0.4, release: 0.1, delay: d });
+    });
+  }
+
+  // Bounce: rubbery thud
+  function playSfxBounce() {
+    playTone({ freq: 180, freq2: 90, type: 'sine', gain: 0.5, duration: 0.18, attack: 0.005, decay: 0.08, sustain: 0.2, release: 0.08 });
+    playTone({ freq: 320, type: 'triangle', gain: 0.15, duration: 0.1, attack: 0.005, decay: 0.04, sustain: 0.1, release: 0.04 });
+  }
+
+  // Sad miss: descending bloop
+  function playSfxMiss() {
+    playTone({ freq: 440, freq2: 220, type: 'sine', gain: 0.28, duration: 0.28, attack: 0.01, decay: 0.1, sustain: 0.4, release: 0.1 });
+    playTone({ freq: 330, freq2: 165, type: 'triangle', gain: 0.15, duration: 0.22, attack: 0.02, decay: 0.08, sustain: 0.3, release: 0.1, delay: 0.12 });
+  }
+
+  // Fan activation: airy whoosh
+  function playSfxFan() {
+    playTone({ freq: 200, freq2: 600, type: 'sawtooth', gain: 0.12, duration: 0.25, attack: 0.04, decay: 0.1, sustain: 0.3, release: 0.1 });
+  }
+
+  // ─────────────────────────────────────────────────
+  // Star tracking
+  // ─────────────────────────────────────────────────
+  let totalStarsEarned = 0;
+
+  function starsForCuts(cutCount) {
+    return cutCount <= 1 ? 3 : cutCount === 2 ? 2 : 1;
+  }
 
   const state = {
     started: false,
@@ -113,8 +188,9 @@
     boohaJumpOffset: 0,
     boohaJumpFrame: 0,
     cutTimers: {},
-    bgStars: [],
-    missDir: 0
+    bgParticles: [],
+    missDir: 0,
+    fallSoundPlayed: false
   };
 
   // ─────────────────────────────────────────────────
@@ -134,13 +210,8 @@
       try { images[key] = await loadImage(src); }
       catch (e) { console.warn('Image failed:', src); }
     }
-    for (const [key, src] of Object.entries(audioSources)) {
-      const a = new Audio(src);
-      a.preload = 'auto';
-      sounds[key] = a;
-    }
     buildBouncePattern();
-    initBgStars();
+    initBgParticles();
   }
 
   function buildBouncePattern() {
@@ -157,92 +228,79 @@
   }
 
   // ─────────────────────────────────────────────────
-  // Candy kingdom background — animated bubbles + sparkles
+  // Background particles — drawn OVER the bg image
   // ─────────────────────────────────────────────────
-  function initBgStars() {
-    state.bgStars = [];
-    // Bubbles
-    for (let i = 0; i < 22; i++) {
-      state.bgStars.push({
-        kind:  'bubble',
-        x:     Math.random() * W,
-        y:     Math.random() * H,
-        r:     Math.random() * 28 + 8,
-        speed: Math.random() * 0.35 + 0.12,
+  function initBgParticles() {
+    state.bgParticles = [];
+    // Floating bubbles
+    for (let i = 0; i < 20; i++) {
+      state.bgParticles.push({
+        kind: 'bubble',
+        x: Math.random() * W,
+        y: Math.random() * H,
+        r: Math.random() * 22 + 6,
+        speed: Math.random() * 0.3 + 0.1,
         wobble: Math.random() * Math.PI * 2,
-        wobbleSpeed: Math.random() * 0.03 + 0.01,
-        alpha: Math.random() * 0.13 + 0.05
+        wobbleSpeed: Math.random() * 0.025 + 0.008,
+        alpha: Math.random() * 0.18 + 0.06
       });
     }
-    // Sparkle stars
-    for (let i = 0; i < 40; i++) {
-      state.bgStars.push({
-        kind:  'sparkle',
-        x:     Math.random() * W,
-        y:     Math.random() * H,
-        r:     Math.random() * 1.8 + 0.4,
+    // Sparkle dots
+    for (let i = 0; i < 35; i++) {
+      state.bgParticles.push({
+        kind: 'sparkle',
+        x: Math.random() * W,
+        y: Math.random() * H,
+        r: Math.random() * 2 + 0.5,
         phase: Math.random() * Math.PI * 2,
-        pulse: Math.random() * 0.5 + 0.3,
+        pulse: Math.random() * 0.45 + 0.25,
         alpha: 0
       });
     }
   }
 
-  function updateBgStars(dt) {
+  function updateBgParticles(dt) {
     const t = state.lastTime * 0.001;
-    for (const s of state.bgStars) {
-      if (s.kind === 'bubble') {
-        s.y -= s.speed * dt * 0.06;
-        s.wobble += s.wobbleSpeed * dt * 0.06;
-        s.x += Math.sin(s.wobble) * 0.4;
-        if (s.y < -s.r * 2) {
-          s.y = H + s.r;
-          s.x = Math.random() * W;
+    for (const p of state.bgParticles) {
+      if (p.kind === 'bubble') {
+        p.y -= p.speed * dt * 0.055;
+        p.wobble += p.wobbleSpeed * dt * 0.055;
+        p.x += Math.sin(p.wobble) * 0.35;
+        if (p.y < -p.r * 2) {
+          p.y = H + p.r;
+          p.x = Math.random() * W;
         }
       } else {
-        s.alpha = s.pulse * (0.5 + 0.5 * Math.sin(t * 1.4 + s.phase));
+        p.alpha = p.pulse * (0.5 + 0.5 * Math.sin(t * 1.6 + p.phase));
       }
     }
   }
 
-  function drawBgStars() {
-    for (const s of state.bgStars) {
-      if (s.kind === 'bubble') {
-        ctx.save();
-        ctx.globalAlpha = s.alpha;
-        // Bubble ring
+  // Draw particles OVER the background image
+  function drawBgParticles() {
+    for (const p of state.bgParticles) {
+      ctx.save();
+      if (p.kind === 'bubble') {
+        ctx.globalAlpha = p.alpha;
         ctx.strokeStyle = '#ffccee';
-        ctx.lineWidth   = 1.2;
+        ctx.lineWidth   = 1.5;
         ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
         ctx.stroke();
-        // Shine dot
-        ctx.globalAlpha = s.alpha * 0.7;
+        ctx.globalAlpha = p.alpha * 0.65;
         ctx.fillStyle   = '#fff';
         ctx.beginPath();
-        ctx.arc(s.x - s.r * 0.28, s.y - s.r * 0.3, s.r * 0.22, 0, Math.PI * 2);
+        ctx.arc(p.x - p.r * 0.3, p.y - p.r * 0.3, p.r * 0.2, 0, Math.PI * 2);
         ctx.fill();
-        ctx.restore();
       } else {
-        ctx.save();
-        ctx.globalAlpha = s.alpha * 0.65;
+        ctx.globalAlpha = p.alpha * 0.7;
         ctx.fillStyle   = '#ffddff';
         ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
         ctx.fill();
-        ctx.restore();
       }
+      ctx.restore();
     }
-  }
-
-  function playSfx(key, loop = false) {
-    const src = audioSources[key];
-    if (!src) return null;
-    const a = new Audio(src);
-    a.loop   = loop;
-    a.volume = 1;
-    a.play().catch(() => {});
-    return a;
   }
 
   // ─────────────────────────────────────────────────
@@ -259,7 +317,6 @@
 
   function setHud(lvl, status) {
     levelText.textContent = String(lvl);
-    goalText.textContent  = 'Feed Booha';
     stateText.textContent = status;
   }
 
@@ -274,7 +331,7 @@
     if (!card) return;
     starContainer = document.createElement('div');
     starContainer.id = 'starRating';
-    starContainer.style.cssText = 'display:flex;justify-content:center;gap:6px;margin:8px 0 4px;font-size:28px;';
+    starContainer.style.cssText = 'display:flex;justify-content:center;gap:6px;margin:8px 0 4px;font-size:32px;letter-spacing:3px;';
     const p = card.querySelector('p');
     if (p) p.after(starContainer); else card.prepend(starContainer);
   }
@@ -282,13 +339,25 @@
   function showStars(cutCount) {
     buildStarUI();
     if (!starContainer) return;
-    const stars = cutCount <= 1 ? 3 : cutCount === 2 ? 2 : 1;
+    const stars = starsForCuts(cutCount);
     starContainer.innerHTML = '';
     for (let i = 0; i < 3; i++) {
       const s = document.createElement('span');
       s.textContent = i < stars ? '★' : '☆';
-      s.style.color = i < stars ? '#ffcc00' : 'rgba(255,255,255,0.25)';
+      s.style.color = i < stars ? '#ffcc00' : 'rgba(255,255,255,0.2)';
+      s.style.textShadow = i < stars ? '0 0 12px #ffcc00, 0 0 24px #ff8800' : 'none';
+      s.style.transition = 'all 0.3s';
+      if (i < stars) {
+        s.style.animation = `starPop 0.35s ease ${i * 0.12}s both`;
+      }
       starContainer.appendChild(s);
+    }
+    // Update total star counter
+    totalStarsEarned += stars;
+    if (totalStarsEl) {
+      totalStarsEl.textContent = totalStarsEarned;
+      totalStarsEl.parentElement.classList.add('star-flash');
+      setTimeout(() => totalStarsEl.parentElement.classList.remove('star-flash'), 600);
     }
   }
 
@@ -318,12 +387,23 @@
     state.lastChanceFired = false;
     state.boohaJumpOffset = 0;
     state.boohaJumpFrame  = 0;
+    state.fallSoundPlayed = false;
 
-    // Kick candy sideways toward center so pendulum swings immediately
-    const kickDir = level.candy.x >= W / 2 ? -1 : 1;
+    // FIX: For two-rope levels, give a more asymmetric kick
+    // so the pendulum swings with clear momentum
+    const ropeCount = (level.ropes || []).length;
+    let kickDir;
+    if (ropeCount >= 2) {
+      // Kick harder toward the side the ropes DON'T average toward
+      const avgAnchorX = level.ropes.reduce((s, r) => s + r.anchor.x, 0) / ropeCount;
+      kickDir = avgAnchorX >= W / 2 ? -1 : 1;
+    } else {
+      kickDir = level.candy.x >= W / 2 ? -1 : 1;
+    }
+
     state.candy = {
       x: level.candy.x, y: level.candy.y,
-      vx: kickDir * 4.5, vy: 0,
+      vx: kickDir * 5.5, vy: 0,  // slightly stronger kick
       r: CANDY_R, attached: true, alive: true
     };
 
@@ -383,6 +463,13 @@
   function showMessage(title, text, nextVisible = true, cutCount = 0) {
     messageTitle.textContent = title;
     messageText.textContent  = text;
+    const stars = starsForCuts(cutCount);
+    // Hide retry button on 3-star wins — no need to retry perfection!
+    if (nextVisible && stars === 3) {
+      retryBtn.style.display = 'none';
+    } else {
+      retryBtn.style.display = nextVisible ? 'inline-flex' : 'none';
+    }
     nextBtn.style.display    = nextVisible ? 'inline-flex' : 'none';
     if (nextVisible) showStars(cutCount);
     else if (starContainer) starContainer.innerHTML = '';
@@ -412,9 +499,10 @@
     const b = state.booha;
 
     if (b.behavior === 'horizontal' && b.range) {
-      const distToEdge = b.dir > 0 ? b.range.max - b.x : b.x - b.range.min;
-      const edgeFactor = Math.min(1, distToEdge / 20);
-      b.x += b.speed * b.dir * edgeFactor * dt * 0.06;
+      // FIX: removed edgeFactor — it was causing near-zero speed near edges
+      // Simple linear patrol with direction flip at bounds
+      const step = b.speed * b.dir * (dt / 16.667);
+      b.x += step;
       if (b.x <= b.range.min)      { b.x = b.range.min; b.dir =  1; }
       else if (b.x >= b.range.max) { b.x = b.range.max; b.dir = -1; }
     }
@@ -427,18 +515,6 @@
     }
   }
 
-  function averageAnchor() {
-    const active = getActiveRopes();
-    if (!active.length) return null;
-    let sx = 0, sy = 0;
-    for (const r of active) { sx += r.anchor.x; sy += r.anchor.y; }
-    return { x: sx / active.length, y: sy / active.length };
-  }
-
-  function dtLerp(from, to, k, dt) {
-    return from + (to - from) * (1 - Math.pow(1 - k, dt / 16.667));
-  }
-
   function updateAttachedCandy(dt) {
     const active = getActiveRopes();
     if (!active.length) { state.candy.attached = false; return; }
@@ -448,25 +524,19 @@
     const subDt = dt / steps;
 
     for (let s = 0; s < steps; s++) {
-      // Gravity — no damping, let energy stay in the system
       c.vy += GRAVITY * subDt / 16.667;
+      c.x  += c.vx * subDt / 16.667;
+      c.y  += c.vy * subDt / 16.667;
 
-      // Integrate
-      c.x += c.vx * subDt / 16.667;
-      c.y += c.vy * subDt / 16.667;
-
-      // Rope length constraint — position correction only, no velocity strip
       for (const rope of active) {
         const dx   = c.x - rope.anchor.x;
         const dy   = c.y - rope.anchor.y;
         const dist = Math.hypot(dx, dy);
         const len  = rope.length || 120;
         if (dist < 0.001 || dist <= len) continue;
-        // Push candy back to rope radius
         const over = (dist - len) / dist;
         c.x -= dx * over;
         c.y -= dy * over;
-        // Reflect velocity so rope acts as a rigid constraint, not a brake
         const nx = dx / dist, ny = dy / dist;
         const vDotN = c.vx * nx + c.vy * ny;
         if (vDotN > 0) {
@@ -476,7 +546,6 @@
       }
     }
 
-    // Very light air resistance — just enough to stop infinite oscillation
     c.vx *= 0.999;
     c.vy *= 0.999;
   }
@@ -494,13 +563,14 @@
     c.vy += (dy / dist) * strength;
   }
 
+  // FIX: Fan timer uses ms — decrement by dt (ms per frame)
   function updateFans(dt) {
     const c = state.candy;
     if (!c || c.attached) return;
     for (const obj of state.objects) {
       if (obj.type !== 'fan' || obj.fanTimer <= 0) continue;
-      obj.fanTimer -= dt;
-      const force = 0.55;
+      obj.fanTimer -= dt;  // dt is in ms, fanTimer is in ms — correct
+      const force = 0.55 * (dt / 16.667);
       const dir   = obj.direction || 'right';
       if (dir === 'right') c.vx += force;
       if (dir === 'left')  c.vx -= force;
@@ -510,8 +580,8 @@
 
   function activateFan(obj) {
     if (obj.fanTimer > 0) return;
-    obj.fanTimer = 600;
-    playSfx('bounce1');
+    obj.fanTimer = 600; // 600 ms active
+    playSfxFan();
     if (navigator.vibrate) navigator.vibrate(30);
   }
 
@@ -548,10 +618,10 @@
       if (c.x+c.r > left && c.x-c.r < right &&
           c.y+c.r >= top  && c.y+c.r <= top+22 && c.vy > 0) {
         c.y  = top - c.r;
-        c.vy = -Math.max(10, c.vy * 0.95);
+        c.vy = -Math.max(10, Math.abs(c.vy) * 0.95);
         c.vx *= 1.02;
         if (state.bounceCooldown <= 0) {
-          playSfx('bounce1');
+          playSfxBounce();
           state.shakeFrames = 7;
           state.shakeAmt    = 3;
           state.bounceCooldown = 8;
@@ -600,16 +670,15 @@
     state.won = true; state.running = false; state.candy.alive = false;
     state.boohaSprite = 'booEat';
     setHud(state.levelIndex + 1, 'Yum!');
-    playSfx('get1');
-    const t1 = setTimeout(() => playSfx('get2'), 180);
-    const t2 = setTimeout(() => playSfx('get3'), 360);
-    state.effectTimers.push(t1, t2);
-    const loopAudio = playSfx('get4', true);
+    playSfxEat();
     const cuts = state.cutCount;
     state.pendingSuccessTimeout = setTimeout(() => {
       state.boohaSprite = 'booWin';
-      if (loopAudio) setTimeout(() => { loopAudio.pause(); loopAudio.currentTime = 0; }, 500);
-      showMessage('Nice!', 'Booha is happy.', true, cuts);
+      playSfxWin();
+      const stars = starsForCuts(cuts);
+      const messages = ['Perfect!', 'Tasty!', 'Good job!'];
+      showMessage(stars === 3 ? '✨ Perfect!' : stars === 2 ? 'Tasty! 🍬' : 'Good job!',
+                  'Booha is happy.', true, cuts);
     }, 520);
   }
 
@@ -623,12 +692,11 @@
     state.missDir     = c.x < mouth.x ? -1 : 1;
     state.boohaSprite = 'booSad';
     setHud(state.levelIndex + 1, 'Miss');
-    const missSfx = ['miss1','miss2','miss3'];
-    playSfx(missSfx[Math.floor(Math.random() * missSfx.length)]);
+    playSfxMiss();
 
     state.pendingFailTimeout = setTimeout(() => {
       showMessage('Oops!', 'Booha missed the candy.', false);
-      state.pendingFailTimeout = setTimeout(() => { hideMessage(); resetLevel(); }, 650);
+      state.pendingFailTimeout = setTimeout(() => { hideMessage(); resetLevel(); }, 1200);
     }, 260);
   }
 
@@ -636,6 +704,14 @@
     const c = state.candy;
     if (c.y + c.r > FLOOR_Y && !state.won) {
       c.y = FLOOR_Y - c.r; c.vx *= 0.95; c.vy = 0;
+    }
+  }
+
+  // Play a fall whistle when candy first becomes free
+  function checkFallSound() {
+    if (!state.fallSoundPlayed && !state.candy.attached) {
+      state.fallSoundPlayed = true;
+      playSfxFall();
     }
   }
 
@@ -657,11 +733,12 @@
     if (rope.cut || rope.pending) return false;
     if (rope.type === 'delayed') {
       rope.pending = true;
-      setHud(state.levelIndex + 1, 'Cutting...');
+      setHud(state.levelIndex + 1, 'Cutting…');
       const id = setTimeout(() => {
         rope.cut = true; rope.pending = false;
         state.cutCount++;
         spawnSlash(rope);
+        playSfxCut();
         if (navigator.vibrate) navigator.vibrate(40);
         if (!getActiveRopes().length) state.candy.attached = false;
         setHud(state.levelIndex + 1, 'Cut!');
@@ -672,6 +749,7 @@
     rope.cut = true;
     state.cutCount++;
     spawnSlash(rope);
+    playSfxCut();
     if (navigator.vibrate) navigator.vibrate(40);
     if (!getActiveRopes().length) state.candy.attached = false;
     setHud(state.levelIndex + 1, 'Cut!');
@@ -729,7 +807,7 @@
   // ─────────────────────────────────────────────────
   function update(dt) {
     if (!state.started || !state.currentLevel) return;
-    updateBgStars(dt);
+    updateBgParticles(dt);
     updateBooha(dt);
     updateTrail();
     if (state.shakeFrames > 0) state.shakeFrames--;
@@ -738,9 +816,10 @@
       if (state.candy.attached) {
         updateAttachedCandy(dt);
       } else {
+        checkFallSound();
         applyMagnet();
         updateFreeCandy();
-        updateFans(dt);
+        updateFans(dt);   // FIX: now called properly with dt in ms
         handleBouncePads();
         checkLastChance();
         checkSuccess();
@@ -760,11 +839,7 @@
   // Draw
   // ─────────────────────────────────────────────────
   function drawBackground() {
-    // Canvas is transparent — body CSS supplies the candy kingdom gradient.
-    // Layer 1 — bubbles and sparkles (under the game image)
-    drawBgStars();
-
-    // Layer 2 — game background image on top of bubbles, full opacity
+    // 1. Draw background image (cover-fit)
     if (images.bg) {
       const img   = images.bg;
       const scale = Math.max(W / img.width, H / img.height);
@@ -772,6 +847,8 @@
       const dh    = img.height * scale;
       ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
     }
+    // 2. Draw bubbles + sparkles OVER the image (now visible!)
+    drawBgParticles();
   }
 
   function drawFloor() {
@@ -787,8 +864,6 @@
       const bx = c.x, by = c.y;
       const mx = (ax+bx)/2, my = (ay+by)/2;
 
-      // Sag based on rope's natural length vs current straight-line distance
-      // More sag when candy swings inward (rope goes slack)
       const straightDist = Math.hypot(bx-ax, by-ay);
       const ropeLen      = rope.length || straightDist;
       const slack        = Math.max(0, ropeLen - straightDist);
@@ -800,19 +875,16 @@
       ctx.save();
       ctx.globalAlpha = alpha;
 
-      // Outer body
       ctx.beginPath();
       ctx.moveTo(ax, ay); ctx.quadraticCurveTo(cpx, cpy, bx, by);
       ctx.strokeStyle = '#c8a84b'; ctx.lineWidth = 7; ctx.lineCap = 'round';
       ctx.stroke();
 
-      // Inner highlight
       ctx.beginPath();
       ctx.moveTo(ax, ay); ctx.quadraticCurveTo(cpx, cpy, bx, by);
       ctx.strokeStyle = '#f0d070'; ctx.lineWidth = 3;
       ctx.stroke();
 
-      // Braided twist
       ctx.setLineDash([6, 10]);
       ctx.lineDashOffset = (state.lastTime * 0.02) % 16;
       ctx.beginPath();
@@ -821,7 +893,6 @@
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Anchor dot
       ctx.fillStyle = '#fff6cf';
       ctx.beginPath(); ctx.arc(ax, ay, 7, 0, Math.PI*2); ctx.fill();
 
@@ -876,7 +947,6 @@
         }
         ctx.restore();
 
-        // Direction arrow & tap ring
         ctx.save();
         ctx.fillStyle = '#fff';
         ctx.font = '14px system-ui';
@@ -941,6 +1011,7 @@
     const shakeY = state.shakeFrames > 0 ? (Math.random()-0.5) * state.shakeAmt * 2 : 0;
     ctx.save();
     ctx.translate(shakeX, shakeY);
+    ctx.clearRect(-10, -10, W+20, H+20);
     drawBackground();
     drawFloor();
     if (!state.currentLevel) { ctx.restore(); return; }
@@ -957,7 +1028,7 @@
   // Main loop
   // ─────────────────────────────────────────────────
   function frame(ts) {
-    const dt = state.lastTime ? ts - state.lastTime : 16.67;
+    const dt = state.lastTime ? Math.min(ts - state.lastTime, 50) : 16.67; // cap dt to avoid spiral
     state.lastTime = ts;
     update(dt);
     draw();
