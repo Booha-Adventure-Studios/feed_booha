@@ -317,7 +317,8 @@
   }
 
   function toggleHelp(show) {
-    helpPanel.hidden = !show;
+    helpPanel.classList.toggle('help-panel--show', show);
+    helpPanel.setAttribute('aria-hidden', String(!show));
   }
 
   function getActiveRopes() {
