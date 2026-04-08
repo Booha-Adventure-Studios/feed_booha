@@ -84,9 +84,10 @@ html, body {
   aspect-ratio: 9 / 16;
   flex-shrink: 0;
   overflow: hidden;
-  background-size: cover;           /* ← add */
-  background-position: center;      /* ← add */
-  background-repeat: no-repeat;     /* ← add */
+  background-image: url('../assets/img/feed_booha-1.png');  /* ← add */
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 /* ── Particle layer — sits UNDER canvas ────────── */
