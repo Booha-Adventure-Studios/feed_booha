@@ -1,20 +1,18 @@
 
 // =====================================================
-// Feed Booha — Engine (v6)
+// Feed Booha — Engine (v7)
 // =====================================================
-// FIXES v6:
-//   • FIX 1: Background image moved OUT of canvas draw
-//             → Set via JS as CSS background on .game-wrap
-//             → Particles now visible behind canvas
-//   • FIX 2: Fans always on — fanTimer check removed from force apply
-//             Tap still triggers visual/audio burst, but force is continuous
-//   • FIX 3: Eat audio plays sequentially (async/await chain)
-//             No more overlapping get-1/2/3/4
-//   • FIX 4: Stars reflect skill: bounce penalty + live HUD stars
-//             3★ = ≤1 cut + no bounce hit
-//             2★ = ≤2 cuts
-//             1★ = anything else
-//   • FIX 5: 3-star celebration: screen shake + confetti burst + PERFECT! text
+// CHANGES v7:
+//   • AUDIO: Global rotating eatSoundIndex (0→1→2→3→0…)
+//             One sound per successful catch, not a chain
+//   • STARS: Per-level parCuts field drives star calculation
+//             3★ = cutCount ≤ parCuts
+//             2★ = cutCount ≤ parCuts + 1
+//             1★ = anything else that clears
+//             Bounce no longer penalizes UNLESS level sets noBounce:true
+//   • CUT FX: Slash replaced with soft sparkle/poof burst
+//             Pastel circles + tiny stars, fades gently
+//   • HUD: Shows "Cuts: X / parCuts" live
 // =====================================================
 
 (() => {
@@ -61,8 +59,9 @@
   const LAST_CHANCE_DIST   = 90;
 
   const swipe        = { active: false, x0: 0, y0: 0, x1: 0, y1: 0 };
-  const slashEffects = [];
-  const confetti     = [];       // FIX 5: confetti particles
+  // v7: poof effects replace slash effects
+  const poofEffects  = [];
+  const confetti     = [];
   const images       = {};
 
   const imageSources = {
@@ -77,27 +76,24 @@
   };
 
   // ─────────────────────────────────────────────────
-  // FIX 1: Set background image as CSS on .game-wrap
-  // Called after assets load so we have the image ready
+  // FIX 1: Background image as CSS on .game-wrap
   // ─────────────────────────────────────────────────
   function applyBackgroundCSS() {
     const wrap = document.querySelector('.game-wrap');
     if (!wrap) return;
-    // Use the preloaded image src directly so it's already cached
-    const src = imageSources.bg;
-    wrap.style.backgroundImage    = `url('${src}')`;
+    wrap.style.backgroundImage    = `url('${imageSources.bg}')`;
     wrap.style.backgroundSize     = 'cover';
     wrap.style.backgroundPosition = 'center';
     wrap.style.backgroundRepeat   = 'no-repeat';
-    // Make canvas transparent so the CSS bg shows through
     canvas.style.background = 'transparent';
   }
 
   // ─────────────────────────────────────────────────
-  // Audio — FIX 3: sequential async chain
+  // Audio — v7: rotating global index, one sound per catch
   // ─────────────────────────────────────────────────
   let audioCtx     = null;
-  let eatLoopAudio = null;
+  // Global across the whole session — survives level resets
+  let eatSoundIndex = 0;
 
   function getAudioCtx() {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -118,39 +114,18 @@
     try { a.pause(); a.currentTime = 0; } catch(e) {}
   }
 
-  // FIX 3: play get-1 → get-2 → get-3 sequentially, then loop get-4
-  // Uses ended event so timing is exact regardless of file duration
-  async function playEatChain() {
-    stopEatLoop();
-    const base  = './assets/audio/';
-    const steps = ['get-1.mp3', 'get-2.mp3', 'get-3.mp3'];
-
-    for (const file of steps) {
-      if (eatLoopAudio === null && state.won === false) {
-        // Check we haven't been stopped mid-chain
-      }
-      await new Promise(resolve => {
-        const a = new Audio(base + file);
-        a.onended = resolve;
-        a.onerror = resolve;          // don't hang on missing file
-        a.play().catch(resolve);
-        // Safety timeout in case ended never fires (e.g., blocked)
-        setTimeout(resolve, 600);
-      });
-    }
-
-    // Loop get-4 until win overlay fires stopEatLoop
-    eatLoopAudio = new Audio(base + 'get-4.mp3');
-    eatLoopAudio.loop = true;
-    eatLoopAudio.play().catch(() => {});
+  // v7: Play exactly one eat sound, then advance the global index
+  // Index cycles: 0 (get-1) → 1 (get-2) → 2 (get-3) → 3 (get-4) → 0 …
+  function playEatSound() {
+    const files = ['get-1.mp3', 'get-2.mp3', 'get-3.mp3', 'get-4.mp3'];
+    const src   = './assets/audio/' + files[eatSoundIndex % files.length];
+    eatSoundIndex = (eatSoundIndex + 1) % files.length;
+    const a = new Audio(src);
+    a.play().catch(() => {});
+    return a;
   }
 
-  function stopEatLoop() {
-    stopFile(eatLoopAudio);
-    eatLoopAudio = null;
-  }
-
-  // Synth helpers (unchanged from v5)
+  // Synth helpers
   function playTone({ freq = 440, freq2 = null, type = 'sine', gain = 0.32, duration = 0.18,
                       attack = 0.01, decay = 0.08, sustain = 0.4, release = 0.10, delay = 0 } = {}) {
     try {
@@ -171,55 +146,248 @@
     } catch(e) {}
   }
 
+  // v7: Cut sound is now softer — little "snip" tone fits the poof FX better
   function playSfxCut() {
-    playTone({ freq: 900, freq2: 380, type: 'square', gain: 0.16, duration: 0.11, attack: 0.004, decay: 0.04, sustain: 0.18, release: 0.05 });
-    playTone({ freq: 1200, type: 'sine', gain: 0.10, duration: 0.07, attack: 0.004, decay: 0.03, sustain: 0.1, release: 0.03, delay: 0.03 });
+    // Soft high snip
+    playTone({ freq: 1400, freq2: 900, type: 'sine', gain: 0.12, duration: 0.08,
+               attack: 0.003, decay: 0.03, sustain: 0.1, release: 0.04 });
+    // Tiny pop body
+    playTone({ freq: 300, freq2: 180, type: 'sine', gain: 0.18, duration: 0.10,
+               attack: 0.004, decay: 0.04, sustain: 0.15, release: 0.04, delay: 0.02 });
   }
+
   function playSfxBounce() {
-    playTone({ freq: 190, freq2: 90, type: 'sine', gain: 0.48, duration: 0.18, attack: 0.004, decay: 0.08, sustain: 0.22, release: 0.07 });
-    playTone({ freq: 320, type: 'triangle', gain: 0.12, duration: 0.10, attack: 0.004, decay: 0.04, sustain: 0.1, release: 0.04 });
+    playTone({ freq: 190, freq2: 90, type: 'sine', gain: 0.48, duration: 0.18,
+               attack: 0.004, decay: 0.08, sustain: 0.22, release: 0.07 });
+    playTone({ freq: 320, type: 'triangle', gain: 0.12, duration: 0.10,
+               attack: 0.004, decay: 0.04, sustain: 0.1, release: 0.04 });
   }
   function playSfxFall() {
-    playTone({ freq: 680, freq2: 300, type: 'sine', gain: 0.20, duration: 0.32, attack: 0.01, decay: 0.10, sustain: 0.55, release: 0.12 });
+    playTone({ freq: 680, freq2: 300, type: 'sine', gain: 0.20, duration: 0.32,
+               attack: 0.01, decay: 0.10, sustain: 0.55, release: 0.12 });
   }
   function playSfxMiss() {
-    playTone({ freq: 440, freq2: 210, type: 'sine', gain: 0.26, duration: 0.28, attack: 0.01, decay: 0.10, sustain: 0.38, release: 0.10 });
-    playTone({ freq: 330, freq2: 155, type: 'triangle', gain: 0.14, duration: 0.22, attack: 0.02, decay: 0.08, sustain: 0.28, release: 0.10, delay: 0.14 });
+    playTone({ freq: 440, freq2: 210, type: 'sine', gain: 0.26, duration: 0.28,
+               attack: 0.01, decay: 0.10, sustain: 0.38, release: 0.10 });
+    playTone({ freq: 330, freq2: 155, type: 'triangle', gain: 0.14, duration: 0.22,
+               attack: 0.02, decay: 0.08, sustain: 0.28, release: 0.10, delay: 0.14 });
   }
   function playSfxFan() {
-    playTone({ freq: 200, freq2: 620, type: 'sawtooth', gain: 0.10, duration: 0.24, attack: 0.04, decay: 0.10, sustain: 0.28, release: 0.10 });
+    playTone({ freq: 200, freq2: 620, type: 'sawtooth', gain: 0.10, duration: 0.24,
+               attack: 0.04, decay: 0.10, sustain: 0.28, release: 0.10 });
   }
   function playSfxWin() {
     [0, 0.13, 0.26, 0.40, 0.50].forEach((d, i) => {
-      playTone({ freq: [523, 659, 784, 1047, 1319][i], type: 'triangle', gain: 0.22, duration: 0.20, attack: 0.01, decay: 0.06, sustain: 0.38, release: 0.09, delay: d });
+      playTone({ freq: [523, 659, 784, 1047, 1319][i], type: 'triangle', gain: 0.22,
+                 duration: 0.20, attack: 0.01, decay: 0.06, sustain: 0.38, release: 0.09, delay: d });
     });
   }
-  // FIX 5: Extra sparkly win sound for 3-star perfect
   function playSfxPerfect() {
     [0, 0.08, 0.16, 0.26, 0.38, 0.52, 0.68].forEach((d, i) => {
-      playTone({ freq: [523, 784, 1047, 1319, 1047, 1319, 1568][i], type: 'triangle', gain: 0.28, duration: 0.22, attack: 0.01, decay: 0.06, sustain: 0.45, release: 0.10, delay: d });
+      playTone({ freq: [523, 784, 1047, 1319, 1047, 1319, 1568][i], type: 'triangle',
+                 gain: 0.28, duration: 0.22, attack: 0.01, decay: 0.06, sustain: 0.45,
+                 release: 0.10, delay: d });
     });
   }
 
   // ─────────────────────────────────────────────────
-  // FIX 4: Stars — skill-based, with bounce penalty
-  // 3★ = ≤1 cut AND no bounce
-  // 2★ = ≤2 cuts (bounce allowed)
-  // 1★ = anything else
+  // v7 STARS — per-level parCuts, no bounce penalty
+  // unless level sets noBounce: true
+  //
+  // 3★ = cutCount ≤ parCuts
+  // 2★ = cutCount ≤ parCuts + 1
+  // 1★ = anything else that still clears
   // ─────────────────────────────────────────────────
   let totalStarsEarned = 0;
 
+  function getParCuts() {
+    const lvl = state.currentLevel;
+    // Fall back to 1 if level author didn't set parCuts
+    return (lvl && lvl.parCuts != null) ? lvl.parCuts : 1;
+  }
+
   function starsForCuts(cutCount, hitBounce) {
-    if (cutCount <= 1 && !hitBounce) return 3;
-    if (cutCount <= 2)               return 2;
+    const par = getParCuts();
+    // Only penalize bounce if the level explicitly opts in
+    const bouncePenalty = hitBounce && state.currentLevel && state.currentLevel.noBounce;
+    if (bouncePenalty) {
+      // Bounce disqualifies 3★ on noBounce levels
+      if (cutCount <= par + 1) return 2;
+      return 1;
+    }
+    if (cutCount <= par)     return 3;
+    if (cutCount <= par + 1) return 2;
     return 1;
   }
 
-  // FIX 4: Live HUD star display during play
   function updateHudStars() {
     if (!hudStarsEl) return;
     const s = starsForCuts(state.cutCount, state.hitBounce);
     hudStarsEl.textContent = '★'.repeat(s) + '☆'.repeat(3 - s);
+  }
+
+  // ─────────────────────────────────────────────────
+  // v7 POOF FX — replaces slash effects
+  // Soft sparkle burst: pastel circles + mini stars
+  // ─────────────────────────────────────────────────
+  const POOF_COLORS = ['#ffb3d9', '#ffd6f0', '#fff0c0', '#c6eaff', '#e0c6ff', '#ffffff'];
+
+  function spawnPoof(x, y) {
+    // Puff cloud particles
+    for (let i = 0; i < 10; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * 3.5 + 1;
+      poofEffects.push({
+        type:  'puff',
+        x, y,
+        vx:    Math.cos(angle) * speed,
+        vy:    Math.sin(angle) * speed - 1.5,
+        size:  Math.random() * 18 + 8,
+        color: POOF_COLORS[Math.floor(Math.random() * POOF_COLORS.length)],
+        life:  1.0,
+        decay: Math.random() * 0.04 + 0.03
+      });
+    }
+    // Tiny star sparkles
+    for (let i = 0; i < 6; i++) {
+      const angle = (Math.PI * 2 / 6) * i + Math.random() * 0.4;
+      const speed = Math.random() * 5 + 2;
+      poofEffects.push({
+        type:  'star',
+        x, y,
+        vx:    Math.cos(angle) * speed,
+        vy:    Math.sin(angle) * speed - 2,
+        size:  Math.random() * 7 + 4,
+        color: Math.random() > 0.5 ? '#ffe8a0' : '#ffc8e8',
+        life:  1.0,
+        decay: Math.random() * 0.05 + 0.03,
+        rot:   Math.random() * Math.PI * 2
+      });
+    }
+  }
+
+  function updatePoofEffects(dt) {
+    const f = dt / 16.667;
+    for (let i = poofEffects.length - 1; i >= 0; i--) {
+      const p = poofEffects[i];
+      p.x   += p.vx * f;
+      p.y   += p.vy * f;
+      p.vy  += 0.08 * f;   // gentle gravity
+      p.vx  *= 0.94;
+      p.life -= p.decay * f;
+      if (p.type === 'puff') p.size += 0.6 * f; // puffs expand as they fade
+      if (p.life <= 0) poofEffects.splice(i, 1);
+    }
+  }
+
+  function drawStar5(ctx, cx, cy, r, color, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle   = color;
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const a  = (Math.PI * 2 / 5) * i - Math.PI / 2;
+      const ai = a + Math.PI / 5;
+      i === 0
+        ? ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r)
+        : ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+      ctx.lineTo(cx + Math.cos(ai) * r * 0.42, cy + Math.sin(ai) * r * 0.42);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawPoofEffects() {
+    for (const p of poofEffects) {
+      const alpha = Math.max(0, p.life);
+      if (p.type === 'puff') {
+        ctx.save();
+        ctx.globalAlpha = alpha * 0.72;
+        ctx.fillStyle   = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } else {
+        // star sparkle
+        drawStar5(ctx, p.x, p.y, p.size, p.color, alpha * 0.9);
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────────
+  // Confetti burst (3-star celebration)
+  // ─────────────────────────────────────────────────
+  const CONFETTI_COLORS = ['#ff5fa8','#ffdd44','#44ddff','#ff8fd1','#ffe066','#a8ffee'];
+
+  function spawnConfetti(x, y) {
+    confetti.length = 0;
+    for (let i = 0; i < 60; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * 14 + 4;
+      confetti.push({
+        x, y,
+        vx:    Math.cos(angle) * speed,
+        vy:    Math.sin(angle) * speed - 6,
+        size:  Math.random() * 8 + 4,
+        color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+        rot:   Math.random() * Math.PI * 2,
+        rotV:  (Math.random() - 0.5) * 0.3,
+        life:  1.0,
+        shape: Math.random() > 0.5 ? 'rect' : 'circle'
+      });
+    }
+    state.perfectTextLife = 120;
+  }
+
+  function updateConfetti(dt) {
+    const g = 0.28 * (dt / 16.667);
+    for (let i = confetti.length - 1; i >= 0; i--) {
+      const p = confetti[i];
+      p.vy  += g;
+      p.x   += p.vx * (dt / 16.667);
+      p.y   += p.vy * (dt / 16.667);
+      p.rot += p.rotV;
+      p.vx  *= 0.985;
+      p.life -= 0.012 * (dt / 16.667);
+      if (p.life <= 0 || p.y > H + 40) confetti.splice(i, 1);
+    }
+    if (state.perfectTextLife > 0) state.perfectTextLife -= dt / 16.667;
+  }
+
+  function drawConfetti() {
+    for (const p of confetti) {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.color;
+      if (p.shape === 'rect') {
+        ctx.fillRect(-p.size/2, -p.size/4, p.size, p.size/2);
+      } else {
+        ctx.beginPath(); ctx.arc(0, 0, p.size/2, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    if (state.perfectTextLife > 0) {
+      const alpha = Math.min(1, state.perfectTextLife / 20);
+      const scale = 1 + 0.12 * Math.sin(state.perfectTextLife * 0.25);
+      const m = boohaMouthPoint();
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(m.x, m.y - 100);
+      ctx.scale(scale, scale);
+      ctx.font = 'bold 52px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#c0006a';
+      ctx.fillText('PERFECT!', 2, 4);
+      ctx.fillStyle = '#fff';
+      ctx.fillText('PERFECT!', 0, 0);
+      ctx.restore();
+    }
   }
 
   // ─────────────────────────────────────────────────
@@ -228,7 +396,7 @@
   const state = {
     started: false, levelIndex: 0, running: false,
     won: false, lost: false, cutCount: 0,
-    hitBounce: false,          // FIX 4: track bounce for star penalty
+    hitBounce: false,
     currentLevel: null, candy: null, ropes: [], objects: [],
     booha: null, boohaSprite: 'booWait',
     effectTimers: [], lastTime: 0,
@@ -239,7 +407,7 @@
     trail: [],
     lastChanceFired: false, boohaJumpOffset: 0, boohaJumpFrame: 0,
     cutTimers: {}, missDir: 0, fallSoundPlayed: false,
-    perfectTextLife: 0         // FIX 5: PERFECT! text countdown
+    perfectTextLife: 0
   };
 
   // ─────────────────────────────────────────────────
@@ -257,7 +425,7 @@
       try { images[k] = await loadImage(src); } catch(e) { console.warn('img fail:', src); }
     }
     buildBouncePattern();
-    applyBackgroundCSS(); // FIX 1: set bg after image loaded
+    applyBackgroundCSS();
   }
 
   function buildBouncePattern() {
@@ -274,7 +442,6 @@
   // Timers
   // ─────────────────────────────────────────────────
   function stopAllTimers() {
-    stopEatLoop();
     if (state.pendingSuccessTimeout) { clearTimeout(state.pendingSuccessTimeout); state.pendingSuccessTimeout = null; }
     if (state.pendingFailTimeout)    { clearTimeout(state.pendingFailTimeout);    state.pendingFailTimeout    = null; }
     for (const id of state.effectTimers) clearTimeout(id);
@@ -286,6 +453,12 @@
   function setHud(lvl, status) {
     if (levelText) levelText.textContent = String(lvl);
     if (stateText) stateText.textContent = status;
+  }
+
+  // v7: HUD shows "Cuts: X / par" live during play
+  function setHudCuts() {
+    const par = getParCuts();
+    setHud(state.levelIndex + 1, `Cuts: ${state.cutCount} / ${par}`);
   }
 
   function cloneLevel(l) { return JSON.parse(JSON.stringify(l)); }
@@ -324,90 +497,13 @@
   }
 
   // ─────────────────────────────────────────────────
-  // FIX 5: Confetti burst
-  // ─────────────────────────────────────────────────
-  const CONFETTI_COLORS = ['#ff5fa8','#ffdd44','#44ddff','#ff8fd1','#ffe066','#a8ffee'];
-
-  function spawnConfetti(x, y) {
-    confetti.length = 0;
-    for (let i = 0; i < 60; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = Math.random() * 14 + 4;
-      confetti.push({
-        x, y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 6,
-        size: Math.random() * 8 + 4,
-        color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
-        rot: Math.random() * Math.PI * 2,
-        rotV: (Math.random() - 0.5) * 0.3,
-        life: 1.0,
-        shape: Math.random() > 0.5 ? 'rect' : 'circle'
-      });
-    }
-    state.perfectTextLife = 120; // ~2s at 60fps
-  }
-
-  function updateConfetti(dt) {
-    const g = 0.28 * (dt / 16.667);
-    for (let i = confetti.length - 1; i >= 0; i--) {
-      const p = confetti[i];
-      p.vy  += g;
-      p.x   += p.vx * (dt / 16.667);
-      p.y   += p.vy * (dt / 16.667);
-      p.rot += p.rotV;
-      p.vx  *= 0.985;
-      p.life -= 0.012 * (dt / 16.667);
-      if (p.life <= 0 || p.y > H + 40) confetti.splice(i, 1);
-    }
-    if (state.perfectTextLife > 0) state.perfectTextLife -= dt / 16.667;
-  }
-
-  function drawConfetti() {
-    for (const p of confetti) {
-      ctx.save();
-      ctx.globalAlpha = Math.max(0, p.life);
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.rot);
-      ctx.fillStyle = p.color;
-      if (p.shape === 'rect') {
-        ctx.fillRect(-p.size/2, -p.size/4, p.size, p.size/2);
-      } else {
-        ctx.beginPath(); ctx.arc(0, 0, p.size/2, 0, Math.PI*2); ctx.fill();
-      }
-      ctx.restore();
-    }
-
-    // PERFECT! bouncing text
-    if (state.perfectTextLife > 0) {
-      const alpha = Math.min(1, state.perfectTextLife / 20);
-      const scale = 1 + 0.12 * Math.sin(state.perfectTextLife * 0.25);
-      const m = boohaMouthPoint();
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.translate(m.x, m.y - 100);
-      ctx.scale(scale, scale);
-      ctx.font = 'bold 52px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      // Shadow
-      ctx.fillStyle = '#c0006a';
-      ctx.fillText('PERFECT!', 2, 4);
-      // Main
-      ctx.fillStyle = '#fff';
-      ctx.fillText('PERFECT!', 0, 0);
-      ctx.restore();
-    }
-  }
-
-  // ─────────────────────────────────────────────────
   // Level build
   // ─────────────────────────────────────────────────
   function buildLevel(index) {
     stopAllTimers();
-    slashEffects.length = 0;
-    confetti.length     = 0;
-    state.trail.length  = 0;
+    poofEffects.length = 0;
+    confetti.length    = 0;
+    state.trail.length = 0;
 
     const rawLevel = LEVELS[index] || LEVELS[0];
     if (!rawLevel) { console.error('No levels.'); return; }
@@ -415,7 +511,7 @@
 
     state.currentLevel    = level;
     state.cutCount        = 0;
-    state.hitBounce       = false;   // FIX 4
+    state.hitBounce       = false;
     state.won             = false;
     state.lost            = false;
     state.missDir         = 0;
@@ -431,10 +527,8 @@
     state.fallSoundPlayed = false;
     state.perfectTextLife = 0;
 
-    // FIX 4: Show initial star state in HUD
     updateHudStars();
 
-    // Kick toward center so pendulum has momentum immediately
     const ropeCount = (level.ropes || []).length;
     let kickVx;
     if (ropeCount >= 2) {
@@ -466,7 +560,6 @@
       fanTimer: 0
     }));
 
-    // ── Booha ──
     const bh = level.booha;
     let initDir = 1;
     if (bh.range) {
@@ -586,27 +679,23 @@
     c.vx *= AIR_DRAG; c.vy *= AIR_DRAG;
   }
 
-  // FIX 2: Fans ALWAYS apply force — fanTimer only controls visual burst
   function updateFans(dt) {
     const c = state.candy;
     if (!c || c.attached) return;
     for (const obj of state.objects) {
       if (obj.type !== 'fan') continue;
-      // Always-on base force
-      const baseForce = 0.32 * (dt / 16.667);
-      // Burst bonus when tapped
+      const baseForce  = 0.32 * (dt / 16.667);
       const burstForce = obj.fanTimer > 0 ? 0.26 * (dt / 16.667) : 0;
       const f = baseForce + burstForce;
       if (obj.direction === 'right') c.vx += f;
       else if (obj.direction === 'left')  c.vx -= f;
       else if (obj.direction === 'up')    c.vy -= f * 1.2;
-
       if (obj.fanTimer > 0) obj.fanTimer -= dt;
     }
   }
 
   function activateFan(obj) {
-    obj.fanTimer = 600; // burst window in ms
+    obj.fanTimer = 600;
     playSfxFan();
     if (navigator.vibrate) navigator.vibrate(30);
   }
@@ -636,8 +725,11 @@
         c.y = top - c.r;
         c.vy = -Math.max(10, Math.abs(c.vy) * 0.95);
         c.vx *= 1.02;
-        state.hitBounce = true; // FIX 4: penalize star
-        updateHudStars();       // FIX 4: live update
+        // Only flag hitBounce if level cares about it (noBounce levels)
+        if (state.currentLevel && state.currentLevel.noBounce) {
+          state.hitBounce = true;
+          updateHudStars();
+        }
         if (state.bounceCooldown <= 0) {
           playSfxBounce();
           state.shakeFrames = 7; state.shakeAmt = 3; state.bounceCooldown = 8;
@@ -665,12 +757,15 @@
     const c = state.candy, m = boohaMouthPoint();
     const dist = Math.hypot(c.x - m.x, c.y - m.y);
     if (dist < SURPRISED_TRIGGER && !c.attached) {
-      state.boohaSprite = 'booSurprised'; setHud(state.levelIndex+1, 'Almost!');
+      state.boohaSprite = 'booSurprised';
     } else if (dist < MOUTH_TRIGGER_DIST && !c.attached) {
-      state.boohaSprite = 'booMouthOpen'; setHud(state.levelIndex+1, 'Open wide');
+      state.boohaSprite = 'booMouthOpen';
     } else {
       state.boohaSprite = 'booWait';
-      setHud(state.levelIndex+1, state.cutCount > 0 ? 'Falling' : 'Ready');
+    }
+    // Live cut count HUD after first cut
+    if (state.cutCount > 0 || !c.attached) {
+      setHudCuts();
     }
   }
 
@@ -687,14 +782,14 @@
     if (Math.hypot(c.x - m.x, c.y - m.y) >= 52) return;
     state.won = true; state.running = false; state.candy.alive = false;
     state.boohaSprite = 'booEat';
-    setHud(state.levelIndex+1, 'Yum!');
-    playEatChain();
 
-    const cuts = state.cutCount;
+    // v7: ONE rotating eat sound per catch
+    playEatSound();
+
+    const cuts      = state.cutCount;
     const hitBounce = state.hitBounce;
-    const stars = starsForCuts(cuts, hitBounce);
+    const stars     = starsForCuts(cuts, hitBounce);
 
-    // FIX 5: 3-star celebration
     if (stars === 3) {
       spawnConfetti(m.x, m.y);
       state.shakeFrames = 18;
@@ -703,7 +798,6 @@
     }
 
     state.pendingSuccessTimeout = setTimeout(() => {
-      stopEatLoop();
       state.boohaSprite = 'booWin';
       if (stars < 3) playSfxWin();
       const title = stars === 3 ? 'Perfect!' : stars === 2 ? 'Tasty!' : 'Good job!';
@@ -735,37 +829,38 @@
   // ─────────────────────────────────────────────────
   // Rope cutting
   // ─────────────────────────────────────────────────
-  function spawnSlash(rope) {
+  function spawnPoofAtRope(rope) {
+    // Poof appears midway along the rope
     const c = state.candy;
-    slashEffects.push({
-      x: (rope.anchor.x + c.x) / 2, y: (rope.anchor.y + c.y) / 2,
-      angle: Math.atan2(c.y - rope.anchor.y, c.x - rope.anchor.x),
-      life: 1.0
-    });
+    spawnPoof(
+      (rope.anchor.x + c.x) / 2,
+      (rope.anchor.y + c.y) / 2
+    );
   }
 
   function tryCutRope(rope) {
     if (rope.cut || rope.pending) return false;
     if (rope.type === 'delayed') {
       rope.pending = true;
-      setHud(state.levelIndex+1, 'Cutting...');
       const id = setTimeout(() => {
         rope.cut = true; rope.pending = false; state.cutCount++;
-        spawnSlash(rope); playSfxCut();
+        spawnPoofAtRope(rope);
+        playSfxCut();
         if (navigator.vibrate) navigator.vibrate(40);
         if (!getActiveRopes().length) state.candy.attached = false;
-        setHud(state.levelIndex+1, 'Cut!');
-        updateHudStars(); // FIX 4
+        updateHudStars();
+        setHudCuts();
       }, rope.delayMs);
       state.cutTimers[rope.id] = id;
       return true;
     }
     rope.cut = true; state.cutCount++;
-    spawnSlash(rope); playSfxCut();
+    spawnPoofAtRope(rope);
+    playSfxCut();
     if (navigator.vibrate) navigator.vibrate(40);
     if (!getActiveRopes().length) state.candy.attached = false;
-    setHud(state.levelIndex+1, 'Cut!');
-    updateHudStars(); // FIX 4
+    updateHudStars();
+    setHudCuts();
     return true;
   }
 
@@ -820,7 +915,8 @@
     if (!state.started || !state.currentLevel) return;
     updateBooha(dt);
     updateTrail();
-    updateConfetti(dt); // FIX 5
+    updateConfetti(dt);
+    updatePoofEffects(dt);   // v7
     if (state.shakeFrames > 0) state.shakeFrames--;
     if (state.running) {
       if (state.candy.attached) {
@@ -838,17 +934,12 @@
       }
       updateBoohaMood();
     }
-    for (let i = slashEffects.length-1; i >= 0; i--) {
-      slashEffects[i].life -= dt * 0.07;
-      if (slashEffects[i].life <= 0) slashEffects.splice(i, 1);
-    }
+    // poofEffects update is above — no slashEffects anymore
   }
 
   // ─────────────────────────────────────────────────
   // Draw
-  // FIX 1: drawBackground() removed — bg is now CSS on .game-wrap
   // ─────────────────────────────────────────────────
-
   function drawFloor() {
     ctx.fillStyle = 'rgba(0,0,0,0.22)';
     ctx.fillRect(0, FLOOR_Y, W, H - FLOOR_Y);
@@ -879,20 +970,6 @@
     }
   }
 
-  function drawSlashEffects() {
-    for (const s of slashEffects) {
-      ctx.save();
-      ctx.globalAlpha = Math.max(0, s.life);
-      ctx.translate(s.x, s.y); ctx.rotate(s.angle + Math.PI/4);
-      const len = 40 * s.life;
-      ctx.strokeStyle='#fff'; ctx.lineWidth=4*s.life; ctx.lineCap='round';
-      ctx.beginPath(); ctx.moveTo(-len,-len*0.3); ctx.lineTo(len,len*0.3); ctx.stroke();
-      ctx.strokeStyle='#ffdd88'; ctx.lineWidth=2*s.life;
-      ctx.beginPath(); ctx.moveTo(-len*0.5,len*0.5); ctx.lineTo(len*0.5,-len*0.5); ctx.stroke();
-      ctx.restore();
-    }
-  }
-
   function drawObjects() {
     const t = state.lastTime * 0.001;
     for (const obj of state.objects) {
@@ -908,9 +985,8 @@
         ctx.restore();
       }
       if (obj.type === 'fan') {
-        // FIX 2: Always spinning — burst state just makes it spin faster + glow
         const active = obj.fanTimer > 0;
-        const spinSpeed = active ? 8 : 3; // FIX 2: base speed higher (was 1.5)
+        const spinSpeed = active ? 8 : 3;
         ctx.save(); ctx.translate(obj.x, obj.y); ctx.rotate(t * spinSpeed);
         ctx.fillStyle = active ? '#ffcc44' : '#ddbbff';
         ctx.beginPath(); ctx.arc(0,0,10,0,Math.PI*2); ctx.fill();
@@ -924,7 +1000,6 @@
         ctx.save(); ctx.fillStyle='#fff'; ctx.font='14px system-ui';
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText(obj.direction==='left'?'←':obj.direction==='up'?'↑':'→', obj.x, obj.y+28);
-        // FIX 2: always-on indicator ring (solid, not dashed)
         ctx.strokeStyle = active ? 'rgba(255,220,50,0.55)' : 'rgba(200,160,255,0.30)';
         ctx.lineWidth = active ? 2 : 1;
         ctx.setLineDash(active ? [] : [4,6]);
@@ -970,18 +1045,21 @@
     const sx = state.shakeFrames>0 ? (Math.random()-0.5)*state.shakeAmt*2 : 0;
     const sy = state.shakeFrames>0 ? (Math.random()-0.5)*state.shakeAmt*2 : 0;
     ctx.save(); ctx.translate(sx, sy);
-    // FIX 1: clearRect only — no background draw, CSS handles it
     ctx.clearRect(-10,-10,W+20,H+20);
     if (!state.currentLevel) { ctx.restore(); return; }
     drawFloor();
-    drawObjects(); drawRopes(); drawSlashEffects(); drawTrail(); drawCandy(); drawBooha();
-    drawConfetti(); // FIX 5: confetti on top
+    drawObjects();
+    drawRopes();
+    drawPoofEffects();   // v7: poof instead of slash, drawn behind candy
+    drawTrail();
+    drawCandy();
+    drawBooha();
+    drawConfetti();
     ctx.restore();
   }
 
   // ─────────────────────────────────────────────────
-  // DOM particle layer — now actually visible (FIX 1)
-  // CSS bg is behind .game-wrap → particles behind canvas
+  // DOM particle layer
   // ─────────────────────────────────────────────────
   function buildDomParticles() {
     const wrap = document.querySelector('.game-wrap');
