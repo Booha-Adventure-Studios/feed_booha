@@ -75,18 +75,7 @@
     candy:        './assets/img/candy.png'
   };
 
-  // ─────────────────────────────────────────────────
-  // FIX 1: Background image as CSS on .game-wrap
-  // ─────────────────────────────────────────────────
-  function applyBackgroundCSS() {
-    const wrap = document.querySelector('.game-wrap');
-    if (!wrap) return;
-    wrap.style.backgroundImage    = `url('${imageSources.bg}')`;
-    wrap.style.backgroundSize     = 'cover';
-    wrap.style.backgroundPosition = 'center';
-    wrap.style.backgroundRepeat   = 'no-repeat';
-    canvas.style.background = 'transparent';
-  }
+
 
   // ─────────────────────────────────────────────────
   // Audio — v7: rotating global index, one sound per catch
@@ -425,7 +414,7 @@
       try { images[k] = await loadImage(src); } catch(e) { console.warn('img fail:', src); }
     }
     buildBouncePattern();
-    applyBackgroundCSS();
+ 
   }
 
   function buildBouncePattern() {
