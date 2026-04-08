@@ -84,6 +84,9 @@ html, body {
   aspect-ratio: 9 / 16;
   flex-shrink: 0;
   overflow: hidden;
+  background-size: cover;           /* ← add */
+  background-position: center;      /* ← add */
+  background-repeat: no-repeat;     /* ← add */
 }
 
 /* ── Particle layer — sits UNDER canvas ────────── */
