@@ -401,7 +401,7 @@
     booha: null, boohaSprite: 'booWait',
     effectTimers: [], lastTime: 0,
     bounceCooldown: 0,
-    pendingSuccessTimeout: null, pendingFailTimeout: null,
+    pendingSuccessTimeout: null, pendingFailTimeout: null, pendingFailTimeout2: null, 
     bouncePattern: null,
     shakeFrames: 0, shakeAmt: 0,
     trail: [],
@@ -444,6 +444,7 @@
   function stopAllTimers() {
     if (state.pendingSuccessTimeout) { clearTimeout(state.pendingSuccessTimeout); state.pendingSuccessTimeout = null; }
     if (state.pendingFailTimeout)    { clearTimeout(state.pendingFailTimeout);    state.pendingFailTimeout    = null; }
+    if (state.pendingFailTimeout2) { clearTimeout(state.pendingFailTimeout2); state.pendingFailTimeout2 = null; }
     for (const id of state.effectTimers) clearTimeout(id);
     state.effectTimers = [];
     for (const id of Object.values(state.cutTimers)) clearTimeout(id);
@@ -816,8 +817,8 @@
     setHud(state.levelIndex+1, 'Miss');
     playSfxMiss();
     state.pendingFailTimeout = setTimeout(() => {
-      showMessage('Oops!', 'Booha missed the candy.', false);
-      state.pendingFailTimeout = setTimeout(() => { hideMessage(); resetLevel(); }, 1400);
+    showMessage('Oops!', 'Booha missed the candy.', false);
+    state.pendingFailTimeout2 = setTimeout(() => { hideMessage(); resetLevel(); }, 1400);
     }, 300);
   }
 
