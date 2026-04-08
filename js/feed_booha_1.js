@@ -1080,8 +1080,9 @@
         `height:${size}px`,
         `animation-duration:${dur}s`,
         `animation-delay:${(Math.random()*-dur).toFixed(1)}s`,
-        `opacity:${(Math.random()*0.18+0.05).toFixed(2)}`
-      ].join(';');
+        `opacity:${(Math.random()*0.18+0.05).toFixed(2)}`,
+        !isBubble ? `bottom:${Math.random()*100}%` : ''
+      ].filter(Boolean).join(';');
       layer.appendChild(el);
     }
   }
